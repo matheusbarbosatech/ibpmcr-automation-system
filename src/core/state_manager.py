@@ -1,224 +1,189 @@
 """
-Gestor de Estado & Deduplicação (estado_videos.json).
+Gerenciador do Plano Mestre de Mídia (plano_mestre_ibpmcr.json e SQLite).
 
-Garante a idempotência do sistema, prevenindo re-transcrições ou re-renderizações
-desnecessárias e gerenciando as 3 filas dinâmicas de prioridade:
-1. Mais Recentes (últimas 48h)
-2. Mais Vistos (com deduplicação em <1s via cópia de MP4 existente)
-3. Acervo Histórico (1º ao 440º vídeo)
+Registra o estado de todo o acervo histórico do canal IBPM CR (@ibpmcr7976),
+gerenciando o plano mestre no Google Drive com persistência dupla em JSON e SQLite.
 """
 
 import os
 import json
-import shutil
+import sqlite3
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from config.settings import OUTPUT_BASE_DIR, SUBFOLDERS, get_folder_path
+from config.settings import OUTPUT_BASE_DIR, SUBFOLDERS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
-class StateManager:
+class MasterPlanManager:
     """
-    Gerenciador centralizado de estado idempotente do ecossistema IBPM CR.
+    Gerenciador centralizado do Plano Mestre de Mídia da IBPM CR (JSON + SQLite).
     """
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, drive_path: Optional[str] = None):
         """
-        Inicializa o gerenciador de estado.
+        Inicializa os arquivos de persistência do Plano Mestre.
 
-        :param db_path: Caminho customizado para o estado_videos.json, se houver.
+        :param drive_path: Caminho customizado para salvamento no Google Drive.
         """
-        if db_path:
-            self.db_path = db_path
-        else:
-            self.db_path = os.path.join(OUTPUT_BASE_DIR, SUBFOLDERS["STATE"])
+        self.base_dir = drive_path or OUTPUT_BASE_DIR
+        os.makedirs(self.base_dir, exist_ok=True)
 
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        self.state: Dict[str, Any] = self._load_state()
+        self.json_path = os.path.join(self.base_dir, "plano_mestre_ibpmcr.json")
+        self.db_path = os.path.join(self.base_dir, "plano_mestre_ibpmcr.db")
 
-    def _load_state(self) -> Dict[str, Any]:
-        """
-        Carrega o estado a partir do arquivo JSON no Google Drive ou local.
-        """
-        if os.path.exists(self.db_path):
+        self._init_sqlite_db()
+        self.state: Dict[str, Any] = self._load_json_state()
+
+    def _init_sqlite_db(self) -> None:
+        """Inicializa as tabelas do banco SQLite para o Plano Mestre."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS videos_master (
+                    video_id TEXT PRIMARY KEY,
+                    titulo_original TEXT,
+                    data_publicacao TEXT,
+                    duracao_segundos INTEGER,
+                    visualizacoes INTEGER,
+                    likes INTEGER,
+                    quantidade_comentarios INTEGER,
+                    descricao TEXT,
+                    transcrito INTEGER DEFAULT 0,
+                    potencial_ebook INTEGER DEFAULT 0,
+                    potencial_kids INTEGER DEFAULT 0,
+                    tema_principal TEXT,
+                    plano_cortes_json TEXT,
+                    criado_em TEXT
+                )
+            """)
+            conn.commit()
+            conn.close()
+            logger.info(f"✅ Banco SQLite do Plano Mestre pronto em: {self.db_path}")
+        except Exception as e:
+            logger.error(f"❌ Erro ao inicializar banco SQLite: {e}")
+
+    def _load_json_state(self) -> Dict[str, Any]:
+        """Carrega o arquivo plano_mestre_ibpmcr.json do Drive."""
+        if os.path.exists(self.json_path):
             try:
-                with open(self.db_path, "r", encoding="utf-8") as f:
+                with open(self.json_path, "r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception as e:
-                logger.error(f"Erro ao ler {self.db_path}: {e}. Criando novo estado.")
-                return self._default_state()
-        return self._default_state()
+                logger.error(f"Erro ao ler JSON {self.json_path}: {e}")
+                return self._default_master_plan()
+        return self._default_master_plan()
 
-    def _default_state(self) -> Dict[str, Any]:
-        """
-        Estrutura padrão do estado inicial.
-        """
+    def _default_master_plan(self) -> Dict[str, Any]:
+        """Estrutura padrão do Plano Mestre de Mídia."""
         return {
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "channel_handle": "@ibpmcr7976",
-            "videos": {},  # video_id -> metadata & status dict
-            "queues": {
-                "recent_48h": [],
-                "most_viewed": [],
-                "historical": []
+            "canal": "@ibpmcr7976",
+            "versao_plano_mestre": "1.0-FASE1",
+            "ultima_atualizacao": datetime.now(timezone.utc).isoformat(),
+            "videos": {},
+            "filas": {
+                "recentes_48h": [],
+                "mais_vistos": [],
+                "acervo_historico": []
             }
         }
 
-    def save_state(self) -> None:
-        """
-        Persiste o estado atualizado no arquivo JSON.
-        """
+    def save_master_plan(self) -> None:
+        """Persiste o estado atualizado em JSON e SQLite no Google Drive."""
         try:
-            self.state["last_updated"] = datetime.now(timezone.utc).isoformat()
-            with open(self.db_path, "w", encoding="utf-8") as f:
+            self.state["ultima_atualizacao"] = datetime.now(timezone.utc).isoformat()
+            
+            # 1. Salva em JSON
+            with open(self.json_path, "w", encoding="utf-8") as f:
                 json.dump(self.state, f, ensure_ascii=False, indent=2)
-            logger.info("💾 estado_videos.json atualizado com sucesso.")
-        except Exception as e:
-            logger.error(f"❌ Erro ao salvar estado_videos.json: {e}")
 
-    def register_video(self, video_id: str, title: str, published_at: str, view_count: int, duration_sec: int = 0) -> Dict[str, Any]:
+            # 2. Salva / Sincroniza em SQLite
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            for vid, data in self.state["videos"].items():
+                cursor.execute("""
+                    INSERT OR REPLACE INTO videos_master (
+                        video_id, titulo_original, data_publicacao, duracao_segundos,
+                        visualizacoes, likes, quantidade_comentarios, descricao,
+                        transcrito, potencial_ebook, potencial_kids, tema_principal,
+                        plano_cortes_json, criado_em
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    vid,
+                    data.get("titulo_original", ""),
+                    data.get("data_publicacao", ""),
+                    data.get("duracao_segundos", 0),
+                    data.get("visualizacoes", 0),
+                    data.get("likes", 0),
+                    data.get("quantidade_comentarios", 0),
+                    data.get("descricao", ""),
+                    1 if data.get("transcrito") else 0,
+                    1 if data.get("potencial_ebook_devocional", {}).get("apropriado_para_ebook") else 0,
+                    1 if data.get("potencial_ebd_kids", {}).get("apropriado_para_ebd_kids") else 0,
+                    data.get("tema_principal", "Geral"),
+                    json.dumps(data.get("mapa_cortes", {}), ensure_ascii=False),
+                    datetime.now(timezone.utc).isoformat()
+                ))
+
+            conn.commit()
+            conn.close()
+            logger.info("💾 Plano Mestre salvo com sucesso (plano_mestre_ibpmcr.json & SQLite).")
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao salvar Plano Mestre: {e}")
+
+    def update_video_analysis(self, video_id: str, meta: Dict[str, Any], analysis: Dict[str, Any]) -> None:
         """
-        Registra ou atualiza metadados de um vídeo no estado.
+        Atualiza os dados de varredura e mapa de cortes para um vídeo específico.
 
         :param video_id: ID do vídeo no YouTube.
-        :param title: Título da transmissão/vídeo.
-        :param published_at: Data de publicação no formato ISO format.
-        :param view_count: Contagem atual de visualizações.
-        :param duration_sec: Duração em segundos.
-        :return: Registro do vídeo no dicionário de estado.
+        :param meta: Metadados extraídos pelo sweeper.
+        :param analysis: Mapa de minutagens extraídos pelo content_analyzer.
         """
         if video_id not in self.state["videos"]:
-            self.state["videos"][video_id] = {
-                "video_id": video_id,
-                "title": title,
-                "published_at": published_at,
-                "view_count": view_count,
-                "duration_sec": duration_sec,
-                "transcribed": False,
-                "transcription_path": None,
-                "edited_short_9_16": False,
-                "short_video_path": None,
-                "edited_medium_16_9": False,
-                "medium_video_path": None,
-                "theme_category": None,
-                "praise_mapped": False,
-                "rag_indexed": False,
-                "processed_queues": []
-            }
-        else:
-            # Atualiza visualizações e metadados sem sobrescrever status de IA
-            self.state["videos"][video_id]["view_count"] = view_count
-            self.state["videos"][video_id]["title"] = title
+            self.state["videos"][video_id] = meta
 
-        self.save_state()
-        return self.state["videos"][video_id]
+        self.state["videos"][video_id].update({
+            "transcrito": True,
+            "potencial_cortes_curtos_9_16": analysis.get("potencial_cortes_curtos_9_16", []),
+            "potencial_cortes_medios_16_9": analysis.get("potencial_cortes_medios_16_9", {}),
+            "potencial_ebook_devocional": analysis.get("potencial_ebook_devocional", {}),
+            "potencial_ebd_kids": analysis.get("potencial_ebd_kids", {}),
+            "louvores_executados_bloco": analysis.get("louvores_executados_bloco", {})
+        })
 
-    def update_queues(self, recent_ids: List[str], most_viewed_ids: List[str], historical_ids: List[str]) -> None:
-        """
-        Atualiza as 3 filas de prioridade dinâmica.
-
-        :param recent_ids: IDs dos vídeos das últimas 48h.
-        :param most_viewed_ids: IDs dos vídeos mais vistos ordenados por viewCount.
-        :param historical_ids: IDs de todo o acervo ordenados do 1º ao 440º.
-        """
-        self.state["queues"]["recent_48h"] = recent_ids
-        self.state["queues"]["most_viewed"] = most_viewed_ids
-        self.state["queues"]["historical"] = historical_ids
-        self.save_state()
-        logger.info(f"Filas atualizadas -> Recentes: {len(recent_ids)}, Mais Vistos: {len(most_viewed_ids)}, Histórico: {len(historical_ids)}")
-
-    def is_already_processed(self, video_id: str, task: str) -> bool:
-        """
-        Verifica se determinada tarefa (transcribed, edited_short_9_16, edited_medium_16_9, rag_indexed)
-        já foi concluída para o vídeo especificado.
-
-        :param video_id: ID do vídeo.
-        :param task: Nome da flag de tarefa.
-        :return: Bool indicando se a tarefa já foi realizada.
-        """
-        video_data = self.state["videos"].get(video_id)
-        if not video_data:
-            return False
-        return video_data.get(task, False)
-
-    def mark_task_complete(self, video_id: str, task: str, file_path: Optional[str] = None, extra_meta: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Marca uma tarefa como concluída para o vídeo no banco de estado.
-
-        :param video_id: ID do vídeo.
-        :param task: Nome da flag da tarefa (ex: 'transcribed').
-        :param file_path: Caminho do arquivo gerado.
-        :param extra_meta: Dicionário complementar de metadados.
-        """
-        if video_id in self.state["videos"]:
-            self.state["videos"][video_id][task] = True
-            if file_path:
-                path_key = f"{task}_path" if not task.endswith("_path") else task
-                self.state["videos"][video_id][path_key] = file_path
-            if extra_meta:
-                self.state["videos"][video_id].update(extra_meta)
-            self.save_state()
-
-    def check_and_deduplicate(self, video_id: str, destination_folder: str, file_prefix: str = "short") -> Optional[str]:
-        """
-        Deduplicação rápida (<1s): Se o vídeo já foi renderizado em outra fila,
-        efetua apenas a cópia do arquivo .mp4 já existente para a nova pasta de destino.
-
-        :param video_id: ID do vídeo.
-        :param destination_folder: Caminho da pasta de destino.
-        :param file_prefix: Prefixo do arquivo ('short' ou 'medium').
-        :return: Caminho do arquivo copiado ou None se não existir edição prévia.
-        """
-        video_data = self.state["videos"].get(video_id)
-        if not video_data:
-            return None
-
-        existing_path = None
-        if file_prefix == "short" and video_data.get("edited_short_9_16"):
-            existing_path = video_data.get("short_video_path")
-        elif file_prefix == "medium" and video_data.get("edited_medium_16_9"):
-            existing_path = video_data.get("medium_video_path")
-
-        if existing_path and os.path.exists(existing_path):
-            os.makedirs(destination_folder, exist_ok=True)
-            target_path = os.path.join(destination_folder, os.path.basename(existing_path))
-            if existing_path != target_path:
-                logger.info(f"⚡ Deduplicação rápida (<1s): Copiando {existing_path} para {target_path}")
-                shutil.copy2(existing_path, target_path)
-            return target_path
-
-        return None
+        self.save_master_plan()
 
     def get_summary(self) -> Dict[str, Any]:
-        """
-        Retorna um resumo estatístico do estado do sistema.
-        """
-        total_registered = len(self.state["videos"])
-        transcribed = sum(1 for v in self.state["videos"].values() if v.get("transcribed"))
-        edited_shorts = sum(1 for v in self.state["videos"].values() if v.get("edited_short_9_16"))
-        edited_mediums = sum(1 for v in self.state["videos"].values() if v.get("edited_medium_16_9"))
+        """Estatísticas consolidadas do Plano Mestre."""
+        total = len(self.state["videos"])
+        transcribed = sum(1 for v in self.state["videos"].values() if v.get("transcrito"))
+        ebooks = sum(1 for v in self.state["videos"].values() if v.get("potencial_ebook_devocional", {}).get("apropriado_para_ebook"))
+        kids = sum(1 for v in self.state["videos"].values() if v.get("potencial_ebd_kids", {}).get("apropriado_para_ebd_kids"))
 
         return {
-            "total_registered": total_registered,
-            "transcribed_count": transcribed,
-            "edited_shorts_count": edited_shorts,
-            "edited_mediums_count": edited_mediums,
-            "queue_sizes": {
-                "recent_48h": len(self.state["queues"]["recent_48h"]),
-                "most_viewed": len(self.state["queues"]["most_viewed"]),
-                "historical": len(self.state["queues"]["historical"])
-            }
+            "total_videos_mapeados": total,
+            "videos_transcritos": transcribed,
+            "potencial_ebooks": ebooks,
+            "potencial_kids": kids,
+            "json_path": self.json_path,
+            "sqlite_path": self.db_path
         }
+
+
+# Mantém compatibilidade com StateManager
+StateManager = MasterPlanManager
 
 
 if __name__ == "__main__":
-    sm = StateManager()
-    print("Estado inicial carregado com sucesso:")
-    print(sm.get_summary())
+    mp = MasterPlanManager()
+    print("Plano Mestre Inicializado:")
+    print(mp.get_summary())

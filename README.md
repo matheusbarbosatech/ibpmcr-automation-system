@@ -1,156 +1,74 @@
-# IBPM CR - Ecossistema de Automação de Mídia e Gestão Eclesiástica
+# IBPM CR - Ecossistema de Mídia e Gestão (FASE 1: Mapeamento & Plano Mestre)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Google Colab T4 GPU](https://img.shields.io/badge/Google%20Colab-T4%20GPU-orange.svg)](https://colab.research.google.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Ecossistema inteligente e 100% automatizado em Python para a **Igreja Batista Pentecostal Mundial (IBPM CR)** - canal do YouTube [`@ibpmcr7976`](https://www.youtube.com/@ibpmcr7976). 
+Ecossistema inteligente em Python para a **Igreja Batista Pentecostal Mundial (IBPM CR)** - canal do YouTube [`@ibpmcr7976`](https://www.youtube.com/@ibpmcr7976).
 
-O sistema integra processamento de áudio/vídeo com IA, pesquisa operacional, modelos preditivos de retenção pastoral, visão computacional, RAG teológico exegético, clonagem de voz e canais interativos de atendimento ao comunitário.
-
----
-
-## 📌 Funcionalidades Principais
-
-- **Mídia & Inteligência Audiovisual:**
-  - Gestão de estado idempotente (`estado_videos.json`) com 3 filas de prioridade (Recentes 48h, Mais Vistos com deduplicação rápida e Acervo Histórico do 1º ao 440º vídeo).
-  - Transcrição acelerada via GPU CUDA com `Faster-Whisper`.
-  - Edição dinâmica de cortes 9:16 (Shorts/Reels) com legendas acopladas e agrupamento 16:9 de temas litúrgicos (Oração, Família, Fé, Libertação).
-  - Mapeamento e catalogação automática de louvores com `librosa` e `AcoustID`.
-  - Tratamento de áudio com `pydub` e geração automática de Feed RSS XML de Podcasts.
-
-- **Inteligência Artificial & PNL:**
-  - **RAG Teológico Exegético:** Assistente com `LlamaIndex` e `ChromaDB` para busca vetorial de sermões e termos em grego/hebraico.
-  - **Clonagem de Voz Pastoral:** Geração de devocionais diários narrados com a voz clonada da liderança (`XTTS-v2`).
-  - **EBD Kids NLP:** Adaptador que simplifica a linguagem dos cultos em historinhas infantis atrativas (`spaCy`).
-  - **Detector de Testemunhos:** Extração automática de relatos de milagres e vitórias (`spaCy NER`) para o "Mural de Testemunhos".
-  - **Análise de Sentimentos:** Mineração de comentários no YouTube usando `BERTimbau`.
-
-- **Analytics, Visão Computacional & Pesquisa Operacional:**
-  - **Otimizador de Escalas:** Solver CSP via `Google OR-Tools` para alocação justa de voluntários sem conflitos de datas.
-  - **Alerta de Evasão Pastoral:** Análise de RFM (Recência, Frequência e Engajamento) com `scikit-learn` para retenção comunitária.
-  - **Visão Computacional:** Contagem anônima de pessoas e lotação do templo em tempo real via `YOLOv8` e `OpenCV`.
-  - **Geo Analytics:** Mapas de calor espaciais de membros e pedidos de oração na Zona Oeste (Campo Grande) com `GeoPandas` e `Folium`.
-
-- **Geração Programática & Canais de Atendimento:**
-  - Gerador de E-books, Devocionais e Apostilas em PDF (`fpdf2`).
-  - Desenho automático de cartões de aniversário via `Pillow` enviados no dia às 08:00.
-  - Slides automáticos em `.pptx` para reuniões de células (`python-pptx`).
-  - Boletim semanal de áudio via `edge-tts`.
-  - Bot no Telegram (`python-telegram-bot`) e Webhook de WhatsApp (`FastAPI` + Twilio).
-  - Painel Web de Curadoria Humana (*Human-in-the-loop*) construído em `Streamlit`.
+> ⚠️ **OBJETIVO DA FASE 1:** Mapeamento completo, ingestão de dados, transcrição leve por IA (`Faster-Whisper` em GPU T4), mineração de texto com PNL (`spaCy`) e geração do **Plano Mestre de Mídia** (`plano_mestre_ibpmcr.json` e banco `SQLite`).
+> **NENHUM VÍDEO É RENDERIZADO OU CORTADO NESTA ETAPA.**
 
 ---
 
-## 📐 Estrutura do Repositório
+## 📌 Escopo da Fase 1 (Mapeamento & Diagnóstico)
+
+1. **Coleta e Extração de Metadados (`src/discovery/channel_sweeper.py`):**
+   - Mapeia todos os ~440+ vídeos do canal `@ibpmcr7976` (3 anos de acervo histórico) via YouTube Data API v3 com fallback por `yt-dlp`.
+   - Extrai metadados completos: `video_id`, `titulo_original`, `data_publicacao`, `duracao_segundos`, `visualizacoes`, `likes`, `quantidade_comentarios` e `descricao`.
+
+2. **Ingestão de Áudio e Transcrição por IA (`src/discovery/transcriber_batch.py`):**
+   - Ingestão leve de áudio em MP3.
+   - Transcrição em lote acelerada por GPU T4 via `Faster-Whisper`.
+   - Armazenamento dos textos completos com carimbos de tempo (*timestamps* segundo a segundo).
+
+3. **Mineração de Texto e Classificação Temática (`src/discovery/content_analyzer.py`):**
+   - Análise semântica via `spaCy` / NLTK para mapeamento das minutagens de início e fim:
+     - **Cortes Curtos (9:16):** 30s a 60s de impacto espiritual.
+     - **Cortes Médios (16:9):** 5 a 15 min categorizados por temas (*Oração*, *Família*, *Fé*, *Libertação*).
+     - **E-books & Devocionais:** Sermões expositivos estruturados para conversão em PDF.
+     - **EBD Kids:** Histórias bíblicas simplificáveis para o público infantil.
+     - **Louvores Executados:** Mapeamento do bloco inicial de louvor.
+
+4. **Geração do Plano Mestre de Mídia (`src/core/state_manager.py`):**
+   - Gravação dos resultados no `plano_mestre_ibpmcr.json` e no banco `SQLite` (`plano_mestre_ibpmcr.db`) no Google Drive (`/content/drive/MyDrive/IBPM_CR_Cortes/`).
+
+5. **Dashboard de Diagnóstico do Canal (`src/discovery/generate_report.py`):**
+   - Geração de relatório visual de diagnóstico em **PDF** (`fpdf2`) e **HTML** contendo total de horas gravadas, gráfico de temas, top 20 vídeos de maior engajamento e inventário de cortes prontos para produção futura.
+
+---
+
+## 📐 Estrutura de Arquivos da Fase 1
 
 ```text
 ibpmcr-automation-system/
-├── .github/
-│   └── workflows/
-│       └── rotina_diaria.yml          # Pipeline diário no GitHub Actions
 ├── config/
-│   ├── settings.py                    # Configurações globais e paths do Drive
-│   └── setup_drive.py                 # Criação das 16 subpastas no Google Drive
+│   ├── settings.py                # Configurações do Drive e APIs
+│   └── setup_drive.py             # Criação de pastas no Google Drive
 ├── src/
-│   ├── core/
-│   │   ├── state_manager.py           # Gerenciador de estado e deduplicação
-│   │   └── youtube_api.py             # Cliente da API v3 do YouTube
-│   ├── processing/
-│   │   ├── audio_transcriber.py       # Transcrição CUDA com Faster-Whisper
-│   │   ├── video_editor.py            # Corte 9:16 / 16:9 com MoviePy e FFmpeg
-│   │   ├── audio_processor.py         # Podcast RSS, pydub e tratamento de áudio
-│   │   └── praise_detector.py         # Mapeamento de louvores (librosa/AcoustID)
-│   ├── ai_modules/
-│   │   ├── rag_theological.py         # RAG Teológico (LlamaIndex + ChromaDB)
-│   │   ├── voice_cloning.py           # Clonagem de voz pastoral (XTTS-v2)
-│   │   ├── nlp_kids.py                # Adaptador EBD Kids (spaCy)
-│   │   ├── ner_testimonies.py         # Reconhecimento de testemunhos (NER)
-│   │   └── sentiment_analysis.py      # Mineração de comentários (BERTimbau)
-│   ├── analytics_opt/
-│   │   ├── schedule_optimizer.py      # Otimização de escalas (Google OR-Tools)
-│   │   ├── rfm_evasion.py             # Modelo preditivo de evasão (scikit-learn)
-│   │   ├── computer_vision.py         # Contagem de público templo (YOLOv8)
-│   │   └── geo_analytics.py           # Mapas de calor espaciais (GeoPandas/Folium)
-│   ├── generation/
-│   │   ├── pdf_generator.py           # PDFs de Devocionais/Kids (fpdf2)
-│   │   ├── image_designer.py          # Cartões de Aniversário e Thumbs (Pillow)
-│   │   ├── pptx_generator.py          # Slides de Célula (python-pptx)
-│   │   └── tts_bulletin.py            # Boletim de áudio (edge-tts)
-│   └── bot/
-│       ├── telegram_bot.py            # Bot interativo Telegram
-│       └── whatsapp_webhook.py        # Webhook FastAPI Twilio WhatsApp
-├── dashboard/
-│   └── app.py                         # App de Curadoria Humana em Streamlit
+│   ├── discovery/
+│   │   ├── channel_sweeper.py     # Varredura do histórico do YouTube
+│   │   ├── transcriber_batch.py   # Transcrição em lote com Faster-Whisper
+│   │   ├── content_analyzer.py    # Classificação temática e mapeamento de cortes
+│   │   └── generate_report.py     # Relatório diagnóstico em PDF/HTML
+│   └── core/
+│       └── state_manager.py       # Gestão do plano_mestre_ibpmcr.json e SQLite
+├── notebooks/
+│   └── Fase1_Varredura_Colab.ipynb # Notebook pronto para rodar no Google Colab
 ├── requirements.txt
-├── .env.example
 └── README.md
 ```
 
 ---
 
-## 🚀 Como Executar no Google Colab
+## 🚀 Como Executar a Fase 1 no Google Colab (GPU T4)
 
-1. **Abra um notebook no Google Colab** com aceleração por **GPU T4** (`Runtime` > `Change runtime type` > `T4 GPU`).
-2. **Monte o Google Drive** e clone este repositório:
-   ```python
-   from google.colab import drive
-   drive.mount('/content/drive')
-
-   !git clone https://github.com/ibpmcr/ibpmcr-automation-system.git
-   %cd ibpmcr-automation-system
-   ```
-3. **Instale as dependências:**
-   ```bash
-   pip install -r requirements.txt
-   python -m spacy download pt_core_news_sm
-   ```
-4. **Inicialize a estrutura de pastas no Drive:**
-   ```bash
-   python config/setup_drive.py
-   ```
-5. **Execute a rotina de processamento:**
-   ```bash
-   python src/core/state_manager.py
-   ```
-
----
-
-## 💻 Como Executar o Dashboard Streamlit Localmente
-
-```bash
-# Clone e entre na pasta do projeto
-git clone https://github.com/ibpmcr/ibpmcr-automation-system.git
-cd ibpmcr-automation-system
-
-# Crie e ative um ambiente virtual
-python -m venv venv
-source venv/bin/activate  # No Windows: venv\Scripts\activate
-
-# Instale os requisitos
-pip install -r requirements.txt
-
-# Inicie a aplicação Streamlit
-streamlit run dashboard/app.py
-```
-
----
-
-## ⚙️ Variáveis de Ambiente (`.env`)
-
-Crie um arquivo `.env` na raiz do projeto conforme a especificação do `.env.example`:
-
-```env
-YOUTUBE_API_KEY="sua_chave_aqui"
-TELEGRAM_BOT_TOKEN="seu_token_telegram"
-TWILIO_ACCOUNT_SID="seu_sid_twilio"
-TWILIO_AUTH_TOKEN="seu_auth_token"
-TWILIO_WHATSAPP_NUMBER="whatsapp:+14155238886"
-DRIVE_MOUNT_PATH="/content/drive/MyDrive/IBPM_CR_Cortes"
-```
+1. Abra o notebook `notebooks/Fase1_Varredura_Colab.ipynb` no Google Colab.
+2. Certifique-se de que o acelerador de hardware esteja definido como **T4 GPU**.
+3. Execute todas as células sequencialmente para gerar o **Plano Mestre de Mídia** no seu Google Drive.
 
 ---
 
 ## 📜 Licença
 
-Este projeto é desenvolvido para o uso exclusivo da **Igreja Batista Pentecostal Mundial (IBPM CR)** sob licença MIT.
+Desenvolvido para uso da **Igreja Batista Pentecostal Mundial (IBPM CR)** sob licença MIT.
