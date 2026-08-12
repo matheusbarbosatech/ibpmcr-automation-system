@@ -2,8 +2,8 @@
 Módulo de Varredura de Lives (/streams) e Download Ordenado de Áudio (Etapa 1 - IBPM CR).
 
 Varre prioritariamente a aba /streams do canal @ibpmcr7976, ordena os vídeos
-rigorosamente do mais antigo (001 em 2022) ao mais recente (447+ em 2026) extraindo
-a data real do evento e realiza o download de áudios leves (64kbps) com nomenclatura sequencial padronizada.
+rigorosamente pela DATA DE POSTAGEM (do 1º vídeo publicado em 03/10/2022 ao mais recente em 2026)
+e realiza o download de áudios leves (64kbps) com nomenclatura sequencial padronizada.
 """
 
 import os
@@ -35,29 +35,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("ChannelSweeper")
 
 
-def get_real_event_date(title: str, published_at_iso: str) -> str:
-    """
-    Extrai a data real do evento/culto a partir do título do vídeo ou usa a data de publicação.
-    Ex: 'Quinta Profética (05/01/2022)' -> '2022-01-05'
-    Ex: 'Culto Santa Ceia (dia 02/10/2022)' -> '2022-10-02'
-    Ex: '1° DIA DE FESTIVIDADE - MINISTERIO INFANTIL(11/08/26)' -> '2026-08-11'
-    """
-    pub_date_str = str(published_at_iso)[:10] if published_at_iso else "2022-10-02"
-
-    m = re.search(r'\(.*?\b(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?\b.*?\)', title)
-    if m:
-        day, month, year = m.group(1), m.group(2), m.group(3)
-        day = f"{int(day):02d}"
-        month = f"{int(month):02d}"
-        if not year:
-            year = pub_date_str[:4]
-        elif len(year) == 2:
-            year = "20" + year
-        return f"{year}-{month}-{day}"
-
-    return pub_date_str
-
-
 class ChannelSweeper:
     """
     Varredor especializado na aba /streams e gerenciador de downloads MP3/M4A sequenciais.
@@ -77,7 +54,7 @@ class ChannelSweeper:
 
     def sweep_and_index_channel(self, limit: int = 600) -> List[Dict[str, Any]]:
         """
-        Varre a rota /streams, extrai datas reais dos eventos e ordena rigorosamente
+        Varre a rota /streams e ordena rigorosamente PELA DATA DE POSTAGEM (data_publicacao / publishedAt)
         do VÍDEO MAIS ANTIGO (001 em 2022) AO MAIS RECENTE (447+ em 2026).
         """
         catalog = {}
@@ -107,7 +84,6 @@ class ChannelSweeper:
                             "video_id": v_id,
                             "titulo_original": title,
                             "data_publicacao": pub_at,
-                            "data_evento_real": get_real_event_date(title, pub_at),
                             "descricao": desc,
                             "url": f"https://www.youtube.com/watch?v={v_id}",
                             "visualizacoes": 150,
@@ -151,7 +127,6 @@ class ChannelSweeper:
                                 "video_id": v_id,
                                 "titulo_original": title,
                                 "data_publicacao": pub_at,
-                                "data_evento_real": get_real_event_date(title, pub_at),
                                 "descricao": desc,
                                 "url": f"https://www.youtube.com/watch?v={v_id}",
                                 "visualizacoes": 150,
@@ -200,7 +175,6 @@ class ChannelSweeper:
                                 "video_id": v_id,
                                 "titulo_original": title,
                                 "data_publicacao": pub_iso,
-                                "data_evento_real": get_real_event_date(title, pub_iso),
                                 "descricao": entry.get("description", ""),
                                 "url": f"https://www.youtube.com/watch?v={v_id}",
                                 "visualizacoes": entry.get("view_count", 100),
@@ -210,15 +184,15 @@ class ChannelSweeper:
             except Exception as e:
                 logger.warning(f"⚠️ Falha no fallback yt-dlp: {e}")
 
-        # Ordenação cronológica rigorosa: do VÍDEO MAIS ANTIGO (001 em 2022) AO MAIS RECENTE (2026)
+        # Ordenação cronológica ESTRITA pela DATA DE POSTAGEM (data_publicacao / publishedAt)
         raw_list = list(catalog.values())
-        sorted_catalog = sorted(raw_list, key=lambda x: str(x.get("data_evento_real", x.get("data_publicacao", ""))))
+        sorted_catalog = sorted(raw_list, key=lambda x: str(x.get("data_publicacao", "")))
 
         # Atribuição do índice sequencial (001, 002, ..., N)
         indexed_catalog = []
         for idx, item in enumerate(sorted_catalog, 1):
             item["indice_sequencial"] = idx
-            date_str = str(item.get("data_evento_real", item.get("data_publicacao", "")))[:10]
+            date_str = str(item.get("data_publicacao", ""))[:10]
             clean_title = sanitize_title(item.get("titulo_original", ""))
             item["titulo_sanitizado"] = clean_title
             item["nome_arquivo_mp3"] = f"{idx:03d}_{date_str}_{item['video_id']}_{clean_title}.mp3"
@@ -227,7 +201,7 @@ class ChannelSweeper:
             self.state_mgr.save_video_metadata(item)
             indexed_catalog.append(item)
 
-        logger.info(f"📅 Acervo de {len(indexed_catalog)} cultos mapeado e ordenado do 001 ao {len(indexed_catalog):03d}!")
+        logger.info(f"📅 Acervo de {len(indexed_catalog)} cultos mapeado e ordenado ESTRITAMENTE PELA DATA DE POSTAGEM do 001 ao {len(indexed_catalog):03d}!")
         return indexed_catalog
 
     def download_audio_file(self, video_data: Dict[str, Any]) -> str:
@@ -238,7 +212,7 @@ class ChannelSweeper:
         v_id = video_data["video_id"]
         url = video_data.get("url", f"https://www.youtube.com/watch?v={v_id}")
         idx = video_data.get("indice_sequencial", 1)
-        date_str = str(video_data.get("data_evento_real", video_data.get("data_publicacao", "")))[:10]
+        date_str = str(video_data.get("data_publicacao", ""))[:10]
         clean_title = video_data.get("titulo_sanitizado") or sanitize_title(video_data.get("titulo_original", ""))
         
         target_filename = f"{idx:03d}_{date_str}_{v_id}_{clean_title}.mp3"
@@ -312,4 +286,4 @@ class ChannelSweeper:
 if __name__ == "__main__":
     sweeper = ChannelSweeper()
     res = sweeper.sweep_and_index_channel(limit=5)
-    print("Mapeamento e ordenação concluídos:", len(res))
+    print("Mapeamento e ordenação por DATA DE POSTAGEM concluídos:", len(res))
