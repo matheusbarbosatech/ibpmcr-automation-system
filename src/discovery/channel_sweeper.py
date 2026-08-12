@@ -184,7 +184,9 @@ class ChannelSweeper:
                             break
 
             videos = list(videos_map.values())
-            logger.info(f"✅ Total de {len(videos)} vídeos/lives mapeados via yt-dlp.")
+            # Inverte a lista para garantir ordem cronológica (do 1º mais antigo em 2022 ao mais recente)
+            videos.reverse()
+            logger.info(f"✅ Total de {len(videos)} vídeos/lives mapeados via yt-dlp em ordem cronológica.")
             return videos
         except Exception as e:
             logger.error(f"❌ Erro ao extrair com yt-dlp: {e}")
