@@ -1,11 +1,18 @@
-# FASE 1: Dependências Principais
+# IBPM CR Automation System - Dependências Python (Fase 1)
+
+# API do YouTube e Scraper de Mídia
 google-api-python-client>=2.100.0
-yt-dlp>=2023.11.16
 youtube-transcript-api>=0.6.1
-faster-whisper>=0.10.0
+yt-dlp>=2024.3.10
+
+# Transcrição por IA em CPU (INT8)
+faster-whisper>=1.0.0
+
+# Processamento de Linguagem Natural (PLN) & Utilidades
 spacy>=3.7.0
-pandas>=2.1.0
-numpy>=1.26.0
-fpdf2>=2.7.5
-python-dotenv>=1.0.0
+tqdm>=4.66.0
 requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Geração de Relatórios e PDFs
+fpdf2>=2.7.8
