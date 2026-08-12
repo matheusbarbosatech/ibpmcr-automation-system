@@ -1,15 +1,9 @@
 """
-======================================================================
- [IBPM CR] AUTOMATION SYSTEM - ETAPA 3: MINERAÇÃO PLN (STRICT GROUNDING)
-======================================================================
+Script Principal da Etapa 3: Análise de PLN e Mineração de Insights Homiléticos (Strict Grounding).
 
-Script de execução exclusiva da ETAPA 3.
-Roda a análise de Processamento de Linguagem Natural (PLN) e Teológica EXCLUSIVAMENTE
-sobre os textos transcritos salvos no SQLite, identificando trechos de Shorts 9:16,
-passagens bíblicas reais, timeline da liturgia, e-books e score viral.
-
-Uso:
-  python 3_analisar_conteudo.py
+Execução independente e idempotente.
+Processa EXCLUSIVAMENTE os vídeos com transcrição confirmada no SQLite (transcrito = 1 AND analisado_pln = 0),
+minando citações 9:16 para Shorts, trechos para Vídeos Médios, referências bíblicas e RAG Chunks.
 """
 
 import sys
@@ -17,66 +11,50 @@ import os
 import argparse
 import logging
 from pathlib import Path
-from tqdm import tqdm
 
-# Garante importação do diretório raiz
-BASE_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(BASE_DIR))
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+sys.path.append(str(Path(__file__).resolve().parent))
 
 from config.settings import DB_PATH
-from src.core.state_manager import MasterPlanManager
 from src.discovery.content_analyzer import ContentAnalyzer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("Etapa3_AnalisePLN")
+logger = logging.getLogger("Etapa3_AnalisarConteudo")
+
+
+def print_banner():
+    banner = """
+===========================================================================
+ [IBPM CR] AUTOMATION SYSTEM - ETAPA 3: ANÁLISE DE PLN E MINERAÇÃO (STRICT GROUNDING)
+   Regra Absoluta: Análise APENAS de Vídeos Efetivamente Transcritos no SQLite
+   Resultados: 9:16 Shorts, Vídeos Médios, Referências Bíblicas & Chunks RAG
+===========================================================================
+    """
+    print(banner)
 
 
 def main():
-    print("\n" + "="*75)
-    print(" [IBPM CR] AUTOMATION SYSTEM - ETAPA 3: MINERAÇÃO PLN (STRICT GROUNDING)")
-    print("   Canal: @ibpmcr7976 | Análise dos 25 Pilares sobre Textos Transcritos")
-    print("="*75 + "\n")
+    parser = argparse.ArgumentParser(description="Etapa 3 - Análise de PLN de Conteúdo Transcrito")
+    parser.add_argument("--batch-size", type=int, default=50, help="Quantidade de transcrições a analisar por lote (padrão: 50)")
+    args = parser.parse_args()
 
-    # 1. Inicializa Gerenciadores
-    state_mgr = MasterPlanManager()
+    print_banner()
+
     analyzer = ContentAnalyzer()
+    analyzed_count = analyzer.process_pending_transcriptions(limit=args.batch_size)
 
-    # 2. Busca vídeos transcritos que aguardam mineração PLN
-    pending_analysis = state_mgr.get_pending_analysis()
-    total_pending = len(pending_analysis)
-
-    if total_pending == 0:
-        print("✅ Nenhuma análise pendente! Todos os cultos transcritos já foram minerados pelo PLN.")
-        print("\n👉 PRÓXIMO PASSO: Execute 'python 4_gerar_relatorio.py' para exportar os relatórios finais!\n")
-        return
-
-    print(f"[INFO] Total de {total_pending} cultos transcritos aguardando mineração PLN de 25 Pilares!")
-
-    # 3. Executa mineração PLN Strict Grounding
-    processed_count = 0
-
-    with tqdm(total=total_pending, desc="Mineração PLN 25 Pilares", unit="culto") as pbar:
-        for vid in pending_analysis:
-            v_id = vid["video_id"]
-            idx = vid.get("indice_sequencial", 0)
-
-            pbar.set_postfix_str(f"[{idx:03d}] Minerando {v_id}...")
-
-            # Executa a análise PLN sobre o registro gravado no SQLite
-            analysis_res = analyzer.analyze_db_record(vid)
-
-            # Persiste os resultados no SQLite
-            state_mgr.save_pln_analysis(v_id, analysis_res, metadata=vid)
-
-            processed_count += 1
-            pbar.update(1)
-
-    print("\n" + "="*75)
-    print(" 🎉 [ETAPA 3 CONCLUÍDA COM SUCESSO!]")
-    print(f"   - Cultos Minerados nesta Rodada: {processed_count}")
-    print(f"   - Banco SQLite Local:            {DB_PATH}")
-    print("="*75)
-    print("\n👉 PRÓXIMO PASSO: Execute 'python 4_gerar_relatorio.py' para gerar o Plano Mestre em JSON e PDF!\n")
+    print("\n" + "=" * 75)
+    print(" RESUMO DA EXECUÇÃO DA ETAPA 3:")
+    print(f"   • Cultos Analisados via PLN: {analyzed_count}")
+    print(f"   • Banco de Dados Atualizado: {DB_PATH}")
+    print("=" * 75)
+    print(" [ETAPA 3 CONCLUÍDA COM SUCESSO!]")
+    print(" Para gerar os relatórios em PDF/HTML e JSON Mestre, rode: python 4_gerar_relatorio.py")
+    print("=" * 75 + "\n")
 
 
 if __name__ == "__main__":
