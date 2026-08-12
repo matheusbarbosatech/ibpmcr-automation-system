@@ -1,8 +1,9 @@
 """
 Módulo de Varredura e Extração do Acervo de Lives (/streams) do Canal (@ibpmcr7976).
 
-Conecta-se à YouTube Data API v3 buscando transmissões encerradas (eventType="completed"),
-bem como a playlist de uploads completa (UU...) e a aba /streams via fallback com yt-dlp.
+Conecta-se à YouTube Data API v3 buscando a playlist de uploads completa (UU...)
+e transmissões encerradas (eventType="completed"), cobrindo 100% dos 446+ cultos
+do 1º histórico em 02/10/2022 até o mais recente.
 """
 
 import os
@@ -48,36 +49,80 @@ class ChannelSweeper:
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao conectar à API do YouTube: {e}. Usando fallback via yt-dlp.")
 
-    def sweep_channel_metadata(self, limit: int = 500) -> List[Dict[str, Any]]:
+    def sweep_channel_metadata(self, limit: int = 600) -> List[Dict[str, Any]]:
         """
-        Varre o acervo completo da aba de LIVES do primeiro culto em 02/10/2022 até o mais recente.
+        Varre o acervo completo das 446+ LIVES e cultos do primeiro em 02/10/2022 até hoje.
         """
-        logger.info(f"🔎 Iniciando varredura das LIVES e cultos do canal {YOUTUBE_CHANNEL_HANDLE}...")
+        logger.info(f"🔎 Iniciando varredura COMPLETA de todos os cultos do canal {YOUTUBE_CHANNEL_HANDLE}...")
 
-        videos = []
+        videos_map: Dict[str, Dict[str, Any]] = {}
+
         if self.youtube:
-            # 1. Tenta varredura de lives encerradas via eventType="completed"
-            videos = self._sweep_via_completed_events(limit=limit)
+            # 1. Varredura via Playlist de Uploads completos (UU...) - Não tem o limite de 250 da API de busca
+            logger.info("📡 Buscando acervo histórico completo via Playlist de Uploads (UU...)...")
+            uploads = self._sweep_via_uploads_playlist(limit=limit)
+            for v in uploads:
+                videos_map[v["video_id"]] = v
 
-            # 2. Se trouxer poucos, complementa via Playlist de Uploads (UU...)
-            if len(videos) < 10:
-                logger.info("📡 Buscando acervo complementar via Playlist de Uploads completos...")
-                videos = self._sweep_via_uploads_playlist(limit=limit)
+            # 2. Complementa com varredura de lives encerradas via eventType="completed"
+            logger.info("📡 Complementando varredura com transmissões ao vivo encerradas (eventType='completed')...")
+            lives = self._sweep_via_completed_events(limit=limit)
+            for v in lives:
+                if v["video_id"] not in videos_map:
+                    videos_map[v["video_id"]] = v
 
-        # 3. Fallback via yt-dlp na aba /streams
-        if not videos:
+        # 3. Fallback via yt-dlp na aba /streams se a API trouxer poucos vídeos
+        if len(videos_map) < 10:
             logger.info("⚡ Executando varredura na aba /streams via fallback com yt-dlp...")
-            videos = self._sweep_via_ytdlp(limit=limit)
+            fallback_vids = self._sweep_via_ytdlp(limit=limit)
+            for v in fallback_vids:
+                if v["video_id"] not in videos_map:
+                    videos_map[v["video_id"]] = v
+
+        videos = list(videos_map.values())
 
         # Ordena estritamente em ordem cronológica (do 1º vídeo de 02/10/2022 ao mais recente)
         videos.sort(key=lambda x: x.get("data_publicacao", ""))
 
         if videos:
-            logger.info(f"📅 Acervo total de {len(videos)} cultos ordenados cronologicamente!")
-            logger.info(f"    1º Culto: {videos[0].get('titulo_original')} ({videos[0].get('data_publicacao')[:10]})")
+            logger.info(f"📅 Acervo TOTAL de {len(videos)} cultos catalogados em ordem cronológica!")
+            logger.info(f"    1º Culto Histórico: {videos[0].get('titulo_original')} ({videos[0].get('data_publicacao')[:10]})")
             logger.info(f"    Último Culto: {videos[-1].get('titulo_original')} ({videos[-1].get('data_publicacao')[:10]})")
 
         return videos
+
+    def _sweep_via_uploads_playlist(self, limit: int) -> List[Dict[str, Any]]:
+        """Busca vídeos da playlist de uploads oficial do canal (UU...). Sem limite de 250."""
+        try:
+            videos = []
+            next_page_token = None
+            uploads_playlist_id = f"UU{YOUTUBE_CHANNEL_ID[2:]}" if YOUTUBE_CHANNEL_ID.startswith("UC") else YOUTUBE_CHANNEL_ID
+
+            while len(videos) < limit:
+                playlist_resp = self.youtube.playlistItems().list(
+                    playlistId=uploads_playlist_id,
+                    part="snippet,contentDetails",
+                    maxResults=min(50, limit - len(videos)),
+                    pageToken=next_page_token
+                ).execute()
+
+                items = playlist_resp.get("items", [])
+                if not items:
+                    break
+
+                video_ids = [item["contentDetails"]["videoId"] for item in items]
+                details = self._fetch_video_details_in_batch(video_ids)
+                videos.extend(details)
+
+                next_page_token = playlist_resp.get("nextPageToken")
+                if not next_page_token:
+                    break
+
+            logger.info(f"✅ {len(videos)} cultos catalogados via Playlist de Uploads (UU...).")
+            return videos
+        except Exception as e:
+            logger.warning(f"⚠️ Falha na busca por playlist de uploads: {e}")
+            return []
 
     def _sweep_via_completed_events(self, limit: int) -> List[Dict[str, Any]]:
         """Busca transmissões ao vivo encerradas (eventType='completed') via API v3."""
@@ -112,39 +157,6 @@ class ChannelSweeper:
             return videos
         except Exception as e:
             logger.warning(f"⚠️ Aviso na busca por eventType='completed': {e}")
-            return []
-
-    def _sweep_via_uploads_playlist(self, limit: int) -> List[Dict[str, Any]]:
-        """Busca vídeos da playlist de uploads oficial do canal (UU...)."""
-        try:
-            videos = []
-            next_page_token = None
-            uploads_playlist_id = f"UU{YOUTUBE_CHANNEL_ID[2:]}" if YOUTUBE_CHANNEL_ID.startswith("UC") else YOUTUBE_CHANNEL_ID
-
-            while len(videos) < limit:
-                playlist_resp = self.youtube.playlistItems().list(
-                    playlistId=uploads_playlist_id,
-                    part="snippet,contentDetails",
-                    maxResults=min(50, limit - len(videos)),
-                    pageToken=next_page_token
-                ).execute()
-
-                items = playlist_resp.get("items", [])
-                if not items:
-                    break
-
-                video_ids = [item["contentDetails"]["videoId"] for item in items]
-                details = self._fetch_video_details_in_batch(video_ids)
-                videos.extend(details)
-
-                next_page_token = playlist_resp.get("nextPageToken")
-                if not next_page_token:
-                    break
-
-            logger.info(f"✅ {len(videos)} cultos catalogados via Playlist de Uploads.")
-            return videos
-        except Exception as e:
-            logger.warning(f"⚠️ Falha na busca por playlist de uploads: {e}")
             return []
 
     def _fetch_video_details_in_batch(self, video_ids: List[str]) -> List[Dict[str, Any]]:
@@ -231,7 +243,6 @@ class ChannelSweeper:
                 logger.warning(f"⚠️ Aviso na extração de {url}: {e}")
 
         videos = list(videos_map.values())
-        # Inverte para manter ordem do 1º mais antigo ao mais recente
         videos.reverse()
         return videos
 
@@ -267,5 +278,5 @@ class ChannelSweeper:
 
 if __name__ == "__main__":
     sweeper = ChannelSweeper()
-    res = sweeper.sweep_channel_metadata(limit=10)
+    res = sweeper.sweep_channel_metadata(limit=600)
     print(f"Total varrido: {len(res)}")
