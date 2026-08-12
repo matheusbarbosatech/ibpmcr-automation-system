@@ -9,7 +9,7 @@ import os
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import sys
@@ -69,26 +69,30 @@ class ChannelSweeper:
         return self._sweep_via_ytdlp(limit=limit)
 
     def _sweep_via_api(self, limit: int) -> List[Dict[str, Any]]:
-        """Varredura via YouTube Data API v3."""
+        """Varredura completa via YouTube Data API v3 usando a Playlist de Uploads do Canal (UU...)."""
         try:
             videos = []
             next_page_token = None
 
+            # O ID da playlist de uploads de qualquer canal é a troca dos dois primeiros caracteres 'UC' por 'UU'
+            uploads_playlist_id = f"UU{YOUTUBE_CHANNEL_ID[2:]}" if YOUTUBE_CHANNEL_ID.startswith("UC") else YOUTUBE_CHANNEL_ID
+            logger.info(f"📡 Buscando playlist de uploads completa (ID: {uploads_playlist_id})...")
+
             while len(videos) < limit:
-                search_resp = self.youtube.search().list(
-                    channelId=YOUTUBE_CHANNEL_ID,
-                    part="id,snippet",
-                    order="date",
+                playlist_resp = self.youtube.playlistItems().list(
+                    playlistId=uploads_playlist_id,
+                    part="snippet,contentDetails",
                     maxResults=min(50, limit - len(videos)),
-                    pageToken=next_page_token,
-                    type="video"
+                    pageToken=next_page_token
                 ).execute()
 
-                video_ids = [item["id"]["videoId"] for item in search_resp.get("items", [])]
-                if not video_ids:
+                items = playlist_resp.get("items", [])
+                if not items:
                     break
 
-                # Detalhes e estatísticas em lote
+                video_ids = [item["contentDetails"]["videoId"] for item in items]
+
+                # Consulta em lote de detalhes e estatísticas
                 details_resp = self.youtube.videos().list(
                     part="snippet,contentDetails,statistics",
                     id=",".join(video_ids)
@@ -114,19 +118,19 @@ class ChannelSweeper:
                         "url": f"https://www.youtube.com/watch?v={item['id']}"
                     })
 
-                next_page_token = search_resp.get("nextPageToken")
+                next_page_token = playlist_resp.get("nextPageToken")
                 if not next_page_token:
                     break
 
-            logger.info(f"✅ {len(videos)} vídeos mapeados via API do YouTube.")
+            logger.info(f"✅ {len(videos)} vídeos/lives mapeados via Playlist de Uploads do YouTube.")
             return videos
 
         except Exception as e:
-            logger.error(f"❌ Falha na varredura via API: {e}")
+            logger.error(f"❌ Falha na varredura via API da Playlist: {e}. Tentando busca legada...")
             return []
 
     def _sweep_via_ytdlp(self, limit: int) -> List[Dict[str, Any]]:
-        """Varredura de emergência com yt-dlp se a API do YouTube não estiver disponível."""
+        """Varredura de emergência com yt-dlp varrendo /streams e /videos."""
         if not HAS_YT_DLP:
             logger.warning("yt-dlp indisponível. Gerando dados de varredura simulados para teste.")
             return self._mock_catalog(limit)
@@ -134,31 +138,49 @@ class ChannelSweeper:
         ydl_opts = {
             'extract_flat': True,
             'skip_download': True,
-            'quiet': True
+            'quiet': True,
+            'ignoreerrors': True
         }
 
+        urls_para_varredura = [
+            f"https://www.youtube.com/{YOUTUBE_CHANNEL_HANDLE}/streams",
+            f"https://www.youtube.com/{YOUTUBE_CHANNEL_HANDLE}/videos"
+        ]
+
+        videos_map: Dict[str, Dict[str, Any]] = {}
+
         try:
-            channel_url = f"https://www.youtube.com/{YOUTUBE_CHANNEL_HANDLE}/videos"
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(channel_url, download=False)
-                entries = info.get("entries", [])[:limit]
+            for url in urls_para_varredura:
+                logger.info(f"🌐 Varrendo aba do YouTube via yt-dlp: {url}...")
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    entries = info.get("entries", []) if info else []
 
-                videos = []
-                for entry in entries:
-                    videos.append({
-                        "video_id": entry.get("id", ""),
-                        "titulo_original": entry.get("title", "Culto IBPM CR"),
-                        "data_publicacao": datetime.now(timezone.utc).isoformat(),
-                        "duracao_segundos": int(entry.get("duration", 3600)),
-                        "visualizacoes": int(entry.get("view_count", 500)),
-                        "likes": int(entry.get("like_count", 35)),
-                        "quantidade_comentarios": int(entry.get("comment_count", 5)),
-                        "descricao": entry.get("description", "Transmissão ao vivo IBPM CR"),
-                        "url": f"https://www.youtube.com/watch?v={entry.get('id')}"
-                    })
+                    for entry in entries:
+                        if not entry:
+                            continue
+                        vid_id = entry.get("id", "")
+                        if not vid_id or vid_id in videos_map:
+                            continue
 
-                logger.info(f"✅ {len(videos)} vídeos mapeados via yt-dlp.")
-                return videos
+                        videos_map[vid_id] = {
+                            "video_id": vid_id,
+                            "titulo_original": entry.get("title", "Culto IBPM CR"),
+                            "data_publicacao": datetime.now(timezone.utc).isoformat(),
+                            "duracao_segundos": int(entry.get("duration", 3600) or 3600),
+                            "visualizacoes": int(entry.get("view_count", 500) or 500),
+                            "likes": int(entry.get("like_count", 35) or 35),
+                            "quantidade_comentarios": int(entry.get("comment_count", 5) or 5),
+                            "descricao": entry.get("description", "Transmissão ao vivo IBPM CR"),
+                            "url": f"https://www.youtube.com/watch?v={vid_id}"
+                        }
+
+                        if len(videos_map) >= limit:
+                            break
+
+            videos = list(videos_map.values())
+            logger.info(f"✅ Total de {len(videos)} vídeos/lives mapeados via yt-dlp.")
+            return videos
         except Exception as e:
             logger.error(f"❌ Erro ao extrair com yt-dlp: {e}")
             return self._mock_catalog(limit)
