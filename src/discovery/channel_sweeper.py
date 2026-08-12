@@ -197,7 +197,7 @@ class ChannelSweeper:
 
         filename_no_ext = f"{idx:03d}_{date_str}_{v_id}_{clean_title}"
         ydl_opts = {
-            'format': 'm4a/bestaudio/best',
+            'format': 'ba/ba*/bestaudio/best',
             'outtmpl': os.path.join(AUDIO_DIR, f"{filename_no_ext}.%(ext)s"),
             'quiet': True,
             'no_warnings': True,
