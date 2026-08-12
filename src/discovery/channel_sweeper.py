@@ -63,10 +63,15 @@ class ChannelSweeper:
         if self.youtube:
             videos = self._sweep_via_api(limit=limit)
             if videos:
+                # Ordena cronologicamente: do mais antigo (3 anos atrás) ao mais recente
+                videos.sort(key=lambda x: x.get("data_publicacao", ""))
+                logger.info(f"📅 Acervo ordenado cronologicamente: 1º vídeo ({videos[0]['data_publicacao'][:10]}) até o mais recente ({videos[-1]['data_publicacao'][:10]}).")
                 return videos
 
         logger.info("⚡ Executando varredura via fallback com yt-dlp...")
-        return self._sweep_via_ytdlp(limit=limit)
+        videos = self._sweep_via_ytdlp(limit=limit)
+        videos.sort(key=lambda x: x.get("data_publicacao", ""))
+        return videos
 
     def _sweep_via_api(self, limit: int) -> List[Dict[str, Any]]:
         """Varredura completa via YouTube Data API v3 usando a Playlist de Uploads do Canal (UU...)."""
