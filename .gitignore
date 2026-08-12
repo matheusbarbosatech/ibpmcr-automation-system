@@ -1,19 +1,24 @@
-# Secret Environment Variables (Do Not Commit)
-.env
-
-# Python Virtual Environment
+# Ignorar ambientes virtuais
 venv/
 .venv/
+env/
+
+# Ignorar banco de dados local e áudios
+data/audio_podcasts/*.mp3
+data/audio_podcasts/*.m4a
+data/audio_podcasts/*.webm
+data/db/*.db
+data/db/*.db-journal
+data/json/*.json
+
+# Ignorar relatórios gerados
+reports/*.pdf
+reports/*.html
+
+# Ignorar arquivos temporários, logs e cookies de sessão pessoal
+cookies.txt
+*.log
+*.tmp
 __pycache__/
 *.pyc
-
-# Local Data Storage & Audio
-data/audio_podcasts/
-data_storage/
-*.mp3
-*.m4a
-
-# Logs & IDE
-.idea/
-.vscode/
-*.log
+.DS_Store

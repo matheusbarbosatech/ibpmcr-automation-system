@@ -191,7 +191,7 @@ class ChannelSweeper:
                     self.state_mgr.mark_audio_downloaded(v_id, existing_p)
                     return existing_p
 
-        # 3. Executa o download leve via yt-dlp
+        # 3. Executa o download leve via yt-dlp com Node.js JS runtime solver
         if not HAS_YT_DLP:
             return self._create_placeholder_audio(v_id, target_filepath)
 
@@ -203,11 +203,8 @@ class ChannelSweeper:
             'no_warnings': True,
             'nocheckcertificate': True,
             'ignoreerrors': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'web', 'mweb']
-                }
-            },
+            'remote_components': ['ejs:github'],
+            'js_runtimes': {'node': {}},
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
