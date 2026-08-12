@@ -1,6 +1,7 @@
 # FASE 1: Dependências Principais
 google-api-python-client>=2.100.0
 yt-dlp>=2023.11.16
+youtube-transcript-api>=0.6.1
 faster-whisper>=0.10.0
 spacy>=3.7.0
 pandas>=2.1.0
