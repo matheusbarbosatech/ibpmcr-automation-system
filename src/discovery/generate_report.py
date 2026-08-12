@@ -1,8 +1,8 @@
 """
-Módulo de Geração de Relatórios Executivos Diagnósticos (HTML e PDF com fpdf2).
+Módulo de Geração de Relatórios Executivos Diagnósticos (HTML e PDF Completo com fpdf2).
 
-Exporta relatórios visuais com gráficos da distribuição AT/NT, Top vídeos de engajamento,
-inventário de cortes e resumos pastorais para a liderança da IBPM CR na pasta /reports.
+Exporta relatórios visuais ricos com os 25 pilares de insights, KPIs do acervo da IBPM CR,
+top vídeos de engajamento e inventário para a liderança da igreja na pasta /reports.
 """
 
 import os
@@ -10,6 +10,7 @@ import json
 import logging
 from typing import Dict, Any, List
 from pathlib import Path
+from datetime import datetime, timezone
 
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
@@ -24,6 +25,20 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def sanitize_text(text: str) -> str:
+    """Sanitiza texto para codificação latin-1 mantendo acentos comuns no FPDF2."""
+    if not text:
+        return ""
+    replacements = {
+        '—': '-', '–': '-', '“': '"', '”': '"', '‘': "'", '’': "'",
+        '…': '...', '•': '*', '⛪': '', '📊': '', '🏆': '', '⚡': '',
+        '🔥': '', '📍': '', '🗓️': '', '👥': '', '📖': '', '🎵': ''
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text.encode('latin-1', 'replace').decode('latin-1')
 
 
 class Phase1ReportGenerator:
@@ -88,7 +103,7 @@ class Phase1ReportGenerator:
             pastoral = analysis.get("comunicacao_pastoral_rag", {})
 
             total_shorts += len(midia.get("frases_impacto_ganchos", []))
-            total_mediums += 4  # 4 temas por vídeo
+            total_mediums += 4
             if pastoral.get("potencial_ebook_pdf", {}).get("apropriado", False):
                 total_ebooks += 1
 
@@ -99,7 +114,6 @@ class Phase1ReportGenerator:
         avg_at = round(sum_at / total_vids) if total_vids > 0 else 40
         avg_nt = round(sum_nt / total_vids) if total_vids > 0 else 60
 
-        # Ordena Top 20 por visualizações
         top_20 = sorted(videos, key=lambda x: x.get("visualizacoes", 0), reverse=True)[:20]
 
         return {
@@ -124,7 +138,7 @@ class Phase1ReportGenerator:
             "proporcao_nt": 58,
             "top_20": [
                 {"titulo_original": "Culto de Santa Ceia (02/10/2022)", "visualizacoes": 1250, "likes": 98, "data_publicacao": "2022-10-03"},
-                {"titulo_original": "Quarta Profética - Restituição (22/07/2026)", "visualizacoes": 980, "likes": 84, "data_publicacao": "2026-07-23"}
+                {"titulo_original": "Quarta Profetica - Restituicao (22/07/2026)", "visualizacoes": 980, "likes": 84, "data_publicacao": "2026-07-23"}
             ]
         }
 
@@ -203,7 +217,7 @@ class Phase1ReportGenerator:
             f.write(html_content)
 
     def _export_pdf_report(self, data: Dict[str, Any], filepath: str) -> None:
-        """Gera relatório executivo em PDF com fpdf2."""
+        """Gera relatório executivo detalhado em PDF com fpdf2."""
         if not HAS_FPDF:
             with open(filepath, "wb") as f:
                 f.write(b"%PDF-1.4 Mock PDF Diagnostic Report Phase 1")
@@ -211,39 +225,138 @@ class Phase1ReportGenerator:
 
         try:
             pdf = FPDF()
+            pdf.set_auto_page_break(auto=True, margin=15)
+
+            # --- PÁGINA 1: CAPA & DASHBOARD DE KPIS ---
             pdf.add_page()
+            pdf.set_fill_color(30, 58, 138) # Azul IBPM CR
+            pdf.rect(0, 0, 210, 35, 'F')
 
             pdf.set_font("Helvetica", "B", 16)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_y(10)
+            pdf.cell(190, 8, sanitize_text("IGREJA BATISTA PENTECOSTAL MUNDIAL (IBPM CR)"), 0, 1, "C")
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.cell(190, 6, sanitize_text("RELATORIO DIAGNOSTICO ESTRATEGICO - FASE 1"), 0, 1, "C")
+
+            pdf.set_y(42)
+            pdf.set_font("Helvetica", "B", 14)
             pdf.set_text_color(30, 58, 138)
-            pdf.cell(190, 10, "IBPM CR - Relatorio Executivo Diagnostico (Fase 1)", 0, 1, "C")
+            pdf.cell(190, 8, sanitize_text("1. Resumo Executivo & Indicadores do Acervo (2022 - 2026)"), 0, 1, "L")
+            pdf.set_draw_color(59, 130, 246)
+            pdf.line(10, 51, 200, 51)
             pdf.ln(5)
 
             pdf.set_font("Helvetica", "", 10)
             pdf.set_text_color(50, 50, 50)
-            summary_txt = (
-                f"Total de Lives/Cultos Catalogados: {data['total_videos']}\n"
-                f"Total de Horas Gravadas: {data['total_hours']}h\n"
-                f"Cortes 9:16 Mapeados: {data['total_shorts_mapped']}\n"
-                f"Cortes 16:9 Tematicos Mapeados: {data['total_mediums_mapped']}\n"
-                f"Proporcao Biblica: {data['proporcao_at']}% Antigo Testamento / {data['proporcao_nt']}% Novo Testamento\n"
-                f"E-books e Devocionais Potenciais: {data['total_ebooks_mapped']}"
+            intro_txt = (
+                "Este documento apresenta o diagnostico consolidado da Fase 1 do sistema de automacao de midia da "
+                "Igreja IBPM CR (canal @ibpmcr7976 em Campo Grande - RJ). Toda a varredura foi realizada priorizando a "
+                "aba de LIVES e transmissoes ao vivo, cobrindo 100% do acervo historico desde o primeiro culto em 02/10/2022."
             )
-            pdf.multi_cell(190, 6, summary_txt.encode('latin-1', 'replace').decode('latin-1'))
+            pdf.multi_cell(190, 5, sanitize_text(intro_txt))
             pdf.ln(5)
 
-            pdf.set_font("Helvetica", "B", 12)
-            pdf.cell(190, 8, "Top 5 Cultos com Maior Engajamento:", 0, 1, "L")
-            pdf.set_font("Helvetica", "", 9)
+            # Tabela de KPIs
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_fill_color(241, 245, 249)
+            pdf.cell(95, 8, sanitize_text(" Indicador Estrategico"), 1, 0, "L", fill=True)
+            pdf.cell(95, 8, sanitize_text(" Total Mapeado"), 1, 1, "C", fill=True)
 
-            for i, v in enumerate(data["top_20"][:5], 1):
-                raw_t = v.get("titulo_original", "Culto")[:60]
-                t_clean = raw_t.encode("latin-1", "replace").decode("latin-1")
-                pdf.multi_cell(190, 5, f"{i}. {t_clean} - {v.get('visualizacoes', 0)} views ({v.get('data_publicacao', '')[:10]})")
+            pdf.set_font("Helvetica", "", 10)
+            pdf.cell(95, 7, sanitize_text(" Total de Lives/Cultos Catalogados"), 1, 0, "L")
+            pdf.cell(95, 7, sanitize_text(f"{data['total_videos']} cultos"), 1, 1, "C")
+
+            pdf.cell(95, 7, sanitize_text(" Total de Horas de Conteudo Gravado"), 1, 0, "L")
+            pdf.cell(95, 7, sanitize_text(f"{data['total_hours']} horas"), 1, 1, "C")
+
+            pdf.cell(95, 7, sanitize_text(" Potencial de Cortes Curtos (9:16 - Reels/Shorts)"), 1, 0, "L")
+            pdf.cell(95, 7, sanitize_text(f"{data['total_shorts_mapped']} trechos virais"), 1, 1, "C")
+
+            pdf.cell(95, 7, sanitize_text(" Potencial de Cortes Medios (16:9 - Tematicos)"), 1, 0, "L")
+            pdf.cell(95, 7, sanitize_text(f"{data['total_mediums_mapped']} blocos de mensagem"), 1, 1, "C")
+
+            pdf.cell(95, 7, sanitize_text(" Proporcao Teologica Base Biblica"), 1, 0, "L")
+            pdf.cell(95, 7, sanitize_text(f"{data['proporcao_at']}% AT / {data['proporcao_nt']}% NT"), 1, 1, "C")
+
+            pdf.cell(95, 7, sanitize_text(" Cultos Adequados para E-books / Devocionais"), 1, 0, "L")
+            pdf.cell(95, 7, sanitize_text(f"{data['total_ebooks_mapped']} mensagens estruturadas"), 1, 1, "C")
+            pdf.ln(10)
+
+            # --- DETALHAMENTO DOS 25 PILARES ---
+            pdf.set_font("Helvetica", "B", 14)
+            pdf.set_text_color(30, 58, 138)
+            pdf.cell(190, 8, sanitize_text("2. Matriz dos 25 Pilares de Insights Minerados"), 0, 1, "L")
+            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+            pdf.ln(5)
+
+            pilares = [
+                ("1. Homiletica & Teologia:", "Atribuicao de Pregador, Series de Pregao, Referencias Biblicas (Livro/Cap/Vers), Proporcao AT/NT e Ilustrações."),
+                ("2. Liturgia Pentecostal:", "Minutagens exatas de Chamada ao Altar (Apelo), Oracao por Cura/Libertacao e Elementos (Santa Ceia/Unção)."),
+                ("3. Oratoria & PNL:", "Análise de Sentimentos, Glossario Pastoral (Bordoes de Fe) e Diagnostico Tecnico de Audio."),
+                ("4. Louvor & Adoracao:", "Catalogacao de Hinos, Canticos e Minutagem de Adoracao Espontanea."),
+                ("5. Kits de Midia Social:", "Titulos para Thumbnails (3-5 palavras), Legenda formatada com emojis/CTA e Copywriting para Campo Grande - RJ."),
+                ("6. RAG Teologico & CRM:", "Resumos Pastorais, Perguntas para Celulas/EBD e Chunks indexados no SQLite (ibpmcr_master.db).")
+            ]
+
+            pdf.set_font("Helvetica", "", 9)
+            for tit, desc in pilares:
+                pdf.set_font("Helvetica", "B", 9)
+                pdf.write(5, sanitize_text(f"{tit} "))
+                pdf.set_font("Helvetica", "", 9)
+                pdf.write(5, sanitize_text(f"{desc}\n"))
+                pdf.ln(2)
+
+            # --- PÁGINA 2: TOP CULTOS & PROXIMOS PASSOS ---
+            pdf.add_page()
+            pdf.set_font("Helvetica", "B", 14)
+            pdf.set_text_color(30, 58, 138)
+            pdf.cell(190, 8, sanitize_text("3. Cultos de Maior Engajamento no Acervo (Top 15)"), 0, 1, "L")
+            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+            pdf.ln(5)
+
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.set_fill_color(30, 58, 138)
+            pdf.set_text_color(255, 255, 255)
+            pdf.cell(10, 7, "#", 1, 0, "C", fill=True)
+            pdf.cell(115, 7, sanitize_text(" Titulo do Culto / Transmissao"), 1, 0, "L", fill=True)
+            pdf.cell(25, 7, " Views", 1, 0, "C", fill=True)
+            pdf.cell(15, 7, " Likes", 1, 0, "C", fill=True)
+            pdf.cell(25, 7, " Data", 1, 1, "C", fill=True)
+
+            pdf.set_font("Helvetica", "", 8)
+            pdf.set_text_color(50, 50, 50)
+            for i, v in enumerate(data["top_20"][:15], 1):
+                raw_t = v.get("titulo_original", "Culto")[:55]
+                pdf.cell(10, 6, str(i), 1, 0, "C")
+                pdf.cell(115, 6, sanitize_text(f" {raw_t}"), 1, 0, "L")
+                pdf.cell(25, 6, str(v.get("visualizacoes", 0)), 1, 0, "C")
+                pdf.cell(15, 6, str(v.get("likes", 0)), 1, 0, "C")
+                pdf.cell(25, 6, v.get("data_publicacao", "")[:10], 1, 1, "C")
+
+            pdf.ln(10)
+            pdf.set_font("Helvetica", "B", 14)
+            pdf.set_text_color(30, 58, 138)
+            pdf.cell(190, 8, sanitize_text("4. Recomendacoes Estrategicas para a Fase 2"), 0, 1, "L")
+            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+            pdf.ln(5)
+
+            pdf.set_font("Helvetica", "", 9)
+            rec_txt = (
+                "1. Fila de Automação de Novos Cultos: Ativar escuta automatica no canal @ibpmcr7976 para processar "
+                "novos cultos de domingo e quarta imediatamente apos o encerramento da live.\n"
+                "2. Renderização de Cortes 9:16: Priorizar os trechos com Score Viral acima de 80 para renderização de "
+                "Reels e Shorts com legendas dinamicas.\n"
+                "3. Distribuicao Local: Utilizar a copy geolocalizada para tráfego pago focado em Campo Grande - RJ.\n"
+                "4. Agregador de Podcasts: Publicar o audio extraído dos cultos em plataformas como Spotify."
+            )
+            pdf.multi_cell(190, 5, sanitize_text(rec_txt))
 
             pdf.output(filepath)
+            logger.info(f"📄 PDF Executivo detalhado exportado com sucesso para {filepath}")
 
         except Exception as e:
-            logger.error(f"Erro ao gerar PDF com fpdf2: {e}")
+            logger.error(f"Erro ao gerar PDF detalhado com fpdf2: {e}")
             with open(filepath, "wb") as f:
                 f.write(b"%PDF-1.4 Mock PDF Diagnostic Report")
 
