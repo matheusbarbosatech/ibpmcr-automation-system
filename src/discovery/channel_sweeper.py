@@ -16,7 +16,7 @@ from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
-from config.settings import YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID, YOUTUBE_CHANNEL_HANDLE, YOUTUBE_UPLOADS_PLAYLIST, AUDIO_DIR
+from config.settings import YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID, YOUTUBE_CHANNEL_HANDLE, YOUTUBE_UPLOADS_PLAYLIST, AUDIO_DIR, BASE_DIR
 from src.core.state_manager import MasterPlanManager, sanitize_title
 
 try:
@@ -142,48 +142,6 @@ class ChannelSweeper:
             except Exception as e:
                 logger.warning(f"⚠️ Falha ao buscar eventType='completed': {e}")
 
-        # 3. Fallback: Scraping via yt-dlp apenas se a API falhar completamente
-        if HAS_YT_DLP and len(catalog) == 0:
-            try:
-                logger.info("⚡ Executando varredura na aba /streams via fallback com yt-dlp...")
-                streams_url = f"https://www.youtube.com/{YOUTUBE_CHANNEL_HANDLE}/streams"
-                
-                ydl_opts = {
-                    'extract_flat': True,
-                    'skip_download': True,
-                    'quiet': True,
-                    'playlistend': limit
-                }
-
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(streams_url, download=False)
-                    entries = info.get('entries', []) if info else []
-
-                    for entry in entries:
-                        if not entry:
-                            continue
-                        v_id = entry.get('id')
-                        title = entry.get('title')
-                        if v_id and title and v_id not in catalog:
-                            pub_at = entry.get('upload_date', '20221002')
-                            if len(pub_at) == 8:
-                                pub_iso = f"{pub_at[:4]}-{pub_at[4:6]}-{pub_at[6:8]}T00:00:00Z"
-                            else:
-                                pub_iso = "2022-10-02T00:00:00Z"
-
-                            catalog[v_id] = {
-                                "video_id": v_id,
-                                "titulo_original": title,
-                                "data_publicacao": pub_iso,
-                                "descricao": entry.get("description", ""),
-                                "url": f"https://www.youtube.com/watch?v={v_id}",
-                                "visualizacoes": entry.get("view_count", 100),
-                                "likes": 15,
-                                "duracao_segundos": int(entry.get("duration", 3600))
-                            }
-            except Exception as e:
-                logger.warning(f"⚠️ Falha no fallback yt-dlp: {e}")
-
         # Ordenação cronológica ESTRITA pela DATA DE POSTAGEM (data_publicacao / publishedAt)
         raw_list = list(catalog.values())
         sorted_catalog = sorted(raw_list, key=lambda x: str(x.get("data_publicacao", "")))
@@ -233,7 +191,7 @@ class ChannelSweeper:
                     self.state_mgr.mark_audio_downloaded(v_id, existing_p)
                     return existing_p
 
-        # 3. Executa o download leve via yt-dlp sem travar nem falhar
+        # 3. Executa o download leve via yt-dlp
         if not HAS_YT_DLP:
             return self._create_placeholder_audio(v_id, target_filepath)
 
@@ -247,13 +205,18 @@ class ChannelSweeper:
             'ignoreerrors': True,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web']
+                    'player_client': ['android', 'web', 'mweb']
                 }
             },
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
         }
+
+        # Suporte a arquivo de cookies local se o usuário fornecer cookies.txt
+        cookies_file = BASE_DIR / "cookies.txt"
+        if cookies_file.exists():
+            ydl_opts['cookiefile'] = str(cookies_file)
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -286,4 +249,4 @@ class ChannelSweeper:
 if __name__ == "__main__":
     sweeper = ChannelSweeper()
     res = sweeper.sweep_and_index_channel(limit=5)
-    print("Mapeamento e ordenação por DATA DE POSTAGEM concluídos:", len(res))
+    print("Mapeamento concluído:", len(res))
