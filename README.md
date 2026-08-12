@@ -1,74 +1,95 @@
-# IBPM CR - Ecossistema de Mídia e Gestão (FASE 1: Mapeamento & Plano Mestre)
+# ⛪ IBPM CR Automation System - FASE 1: Varredura de Lives & Plano Mestre DE Mídia
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![Google Colab T4 GPU](https://img.shields.io/badge/Google%20Colab-T4%20GPU-orange.svg)](https://colab.research.google.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-Ecossistema inteligente em Python para a **Igreja Batista Pentecostal Mundial (IBPM CR)** - canal do YouTube [`@ibpmcr7976`](https://www.youtube.com/@ibpmcr7976).
-
-> ⚠️ **OBJETIVO DA FASE 1:** Mapeamento completo, ingestão de dados, transcrição leve por IA (`Faster-Whisper` em GPU T4), mineração de texto com PNL (`spaCy`) e geração do **Plano Mestre de Mídia** (`plano_mestre_ibpmcr.json` e banco `SQLite`).
-> **NENHUM VÍDEO É RENDERIZADO OU CORTADO NESTA ETAPA.**
+> **REGRA DE OURO DA FASE 1:** NENHUM VÍDEO É RENDERIZADO OU CORTADO NESTA ETAPA.  
+> **Foco:** Mapeamento completo da aba de LIVES (`/streams`), ingestão leve de áudio, transcrição via CPU otimizada (Faster-Whisper INT8) e mineração dos **25 Pilares de Insights Teológicos, Litúrgicos e de Mídia**.
 
 ---
 
-## 📌 Escopo da Fase 1 (Mapeamento & Diagnóstico)
-
-1. **Coleta e Extração de Metadados (`src/discovery/channel_sweeper.py`):**
-   - Mapeia todos os ~440+ vídeos do canal `@ibpmcr7976` (3 anos de acervo histórico) via YouTube Data API v3 com fallback por `yt-dlp`.
-   - Extrai metadados completos: `video_id`, `titulo_original`, `data_publicacao`, `duracao_segundos`, `visualizacoes`, `likes`, `quantidade_comentarios` e `descricao`.
-
-2. **Ingestão de Áudio e Transcrição por IA (`src/discovery/transcriber_batch.py`):**
-   - Ingestão leve de áudio em MP3.
-   - Transcrição em lote acelerada por GPU T4 via `Faster-Whisper`.
-   - Armazenamento dos textos completos com carimbos de tempo (*timestamps* segundo a segundo).
-
-3. **Mineração de Texto e Classificação Temática (`src/discovery/content_analyzer.py`):**
-   - Análise semântica via `spaCy` / NLTK para mapeamento das minutagens de início e fim:
-     - **Cortes Curtos (9:16):** 30s a 60s de impacto espiritual.
-     - **Cortes Médios (16:9):** 5 a 15 min categorizados por temas (*Oração*, *Família*, *Fé*, *Libertação*).
-     - **E-books & Devocionais:** Sermões expositivos estruturados para conversão em PDF.
-     - **EBD Kids:** Histórias bíblicas simplificáveis para o público infantil.
-     - **Louvores Executados:** Mapeamento do bloco inicial de louvor.
-
-4. **Geração do Plano Mestre de Mídia (`src/core/state_manager.py`):**
-   - Gravação dos resultados no `plano_mestre_ibpmcr.json` e no banco `SQLite` (`plano_mestre_ibpmcr.db`) no Google Drive (`/content/drive/MyDrive/IBPM_CR_Cortes/`).
-
-5. **Dashboard de Diagnóstico do Canal (`src/discovery/generate_report.py`):**
-   - Geração de relatório visual de diagnóstico em **PDF** (`fpdf2`) e **HTML** contendo total de horas gravadas, gráfico de temas, top 20 vídeos de maior engajamento e inventário de cortes prontos para produção futura.
-
----
-
-## 📐 Estrutura de Arquivos da Fase 1
+## 🎯 Arquitetura & Estrutura de Pastas da Fase 1
 
 ```text
 ibpmcr-automation-system/
 ├── config/
-│   ├── settings.py                # Configurações do Drive e APIs
-│   └── setup_drive.py             # Criação de pastas no Google Drive
+│   └── settings.py                # Configurações de caminhos locais, API Keys e Faster-Whisper
+├── data/
+│   ├── db/
+│   │   └── ibpmcr_master.db       # Banco SQLite local estruturado para RAG e análises
+│   ├── json/
+│   │   └── plano_mestre_ibpmcr.json # Estado consolidado em JSON contendo os 25 pilares de insights
+│   └── audio_podcasts/            # MP3s leves (64kbps mono)
+├── reports/                       # Relatórios HTML e PDF
 ├── src/
-│   ├── discovery/
-│   │   ├── channel_sweeper.py     # Varredura do histórico do YouTube
-│   │   ├── transcriber_batch.py   # Transcrição em lote com Faster-Whisper
-│   │   ├── content_analyzer.py    # Classificação temática e mapeamento de cortes
-│   │   └── generate_report.py     # Relatório diagnóstico em PDF/HTML
-│   └── core/
-│       └── state_manager.py       # Gestão do plano_mestre_ibpmcr.json e SQLite
-├── notebooks/
-│   └── Fase1_Varredura_Colab.ipynb # Notebook pronto para rodar no Google Colab
+│   ├── core/
+│   │   └── state_manager.py       # Gerenciador de estado no SQLite/JSON com idempotência
+│   └── discovery/
+│       ├── channel_sweeper.py     # Varredura do YouTube focada na aba de LIVES (/streams) + API v3
+│       ├── transcriber_batch.py   # Download de MP3 leve + Transcrição CPU (faster-whisper INT8)
+│       ├── content_analyzer.py    # Motor avançado de PLN, Homilética, Liturgia, Oratória, Mídia e Operações (25 Pilares)
+│       └── generate_report.py     # Gerador de relatórios executivos em HTML e PDF
+├── run_fase1_varredura.py         # Script principal de orquestração
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## 🚀 Como Executar a Fase 1 no Google Colab (GPU T4)
+## 💎 Os 25 Pilares de Insights Minerados por Culto
 
-1. Abra o notebook `notebooks/Fase1_Varredura_Colab.ipynb` no Google Colab.
-2. Certifique-se de que o acelerador de hardware esteja definido como **T4 GPU**.
-3. Execute todas as células sequencialmente para gerar o **Plano Mestre de Mídia** no seu Google Drive.
+### 🏛️ A. Homilética, Teologia Avançada & Mapeamento Bíblico (AT vs NT)
+1. **Pregador / Preletor:** Atribuição do mensageiro (*Pastor Titular, Pastora, Convidado, etc.*).
+2. **Série / Campanha:** Identificação da campanha (*Quarta Profética, Santa Ceia, Restituição, etc.*).
+3. **Estilo Homilético:** Classificação (*Doutrinária, Evangelística, Profética, Encorajamento*).
+4. **Passagens Bíblicas:** Mapeamento de livros, capítulos e versículos pregados (*Isaías, Salmos, Atos, etc.*).
+5. **Proporção AT vs NT:** Percentual de embasamento no Antigo Testamento vs Novo Testamento.
+6. **Ilustrações & Testemunhos:** Catalogação de metáforas e testemunhos do altar.
+7. **Análise Sazonal:** Tag de datas e temporadas festivas.
+
+### 🎙️ B. Oratória, Liturgia Pentecostal & Qualidade Técnica
+8. **Dinâmica do Tom & Sentimentos:** Sentimento emocional predominante (*Gratidão, Esperança, Clamor*).
+9. **Glossário Pastoral:** Bordões e expressões proféticas marcantes.
+10. **Altar Call (Apelo):** Minutagem exata da chamada ao altar.
+11. **Oração por Cura & Libertação:** Minutagem exata do clamor por milagres.
+12. **Elementos Sagrados:** Minutagem da Santa Ceia, Unção com Óleo, etc.
+13. **Diagnóstico Técnico de Áudio:** Avaliação de estabilidade sonora.
+
+### 🎵 C. Louvor & Adoração
+14. **Repertório de Hinos:** Catalogação dos cânticos de adoração.
+15. **Adoração Espontânea:** Marcação dos momentos de louvor espontâneo.
+
+### 📱 D. Kits de Conteúdo, Social Media & Conexão Local (Campo Grande - RJ)
+16. **Frases de Impacto & Ganchos Virais:** Citações com minutagem para Shorts/Reels 9:16.
+17. **Linha do Tempo das Etapas:** Divisão exata em min/seg (Louvor, Palavra, Apelo, Ofertas).
+18. **Score de Potencial Viral:** Nota de 0 a 100 baseada em engajamento e PNL.
+19. **Thumbnail Titulo:** Sugestão de título curto (3 a 5 palavras) para capas.
+20. **Legenda Instagram:** Texto formatado com emojis e chamada para ação (CTA).
+21. **Copywriting Geolocalizado:** Texto de convite focado na região de Campo Grande - RJ.
+
+### 📬 E. Comunicação Pastoral, Produtos Derivados & RAG
+22. **Resumo Pastoral:** Síntese em 1 parágrafo para membros ausentes.
+23. **Palavra Profética da Semana:** 5 palavras-chave para o boletim via WhatsApp/Telegram.
+24. **Roteiro para Células / EBD:** 3 a 4 perguntas reflexivas para estudo em grupo.
+25. **Chunks RAG Teológicos:** Fatiamento em blocos com timestamps salvos no SQLite para futura busca semântica.
 
 ---
 
-## 📜 Licença
+## 🚀 Como Executar Localmente na CPU
 
-Desenvolvido para uso da **Igreja Batista Pentecostal Mundial (IBPM CR)** sob licença MIT.
+1. **Instalar as dependências:**
+   ```bash
+   pip install -r requirements.txt
+   python -m spacy download pt_core_news_sm
+   ```
+
+2. **Configurar o arquivo `.env`:**
+   ```env
+   YOUTUBE_API_KEY="SuaChaveAPI"
+   YOUTUBE_CHANNEL_ID="UCHhLxWRcCB-xKo0ifOQ8MVQ"
+   YOUTUBE_CHANNEL_HANDLE="@ibpmcr7976"
+   USE_CUDA="False"
+   WHISPER_MODEL_SIZE="small"
+   ```
+
+3. **Executar o script de orquestração:**
+   ```bash
+   python run_fase1_varredura.py
+   ```

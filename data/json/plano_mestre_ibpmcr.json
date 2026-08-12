@@ -1,0 +1,1073 @@
+{
+  "canal": "@ibpmcr7976",
+  "versao_plano_mestre": "2.0-FASE1-25PILARES",
+  "total_videos_catalogados": 5,
+  "ultima_atualizacao": "2026-08-12T17:02:21.235037+00:00",
+  "videos": {
+    "ibpm_live_001": {
+      "homiletica_teologia": {
+        "pregador": "Pastor Titular (IBPM CR)",
+        "serie_campanha": "Culto de Celebração",
+        "estilo_homiletico": "Profética / Exortação Espiritual",
+        "referencias_biblicas": [
+          "Salmos",
+          "Atos",
+          "Isaías",
+          "João"
+        ],
+        "proporcao_at_nt": {
+          "AT": 40,
+          "NT": 60
+        },
+        "ilustracoes_testemunhos": [
+          "Ilustração de fé e perseverança na jornada cristã"
+        ],
+        "analise_sazonal": "Ciclo Comum de Cultos"
+      },
+      "liturgia_oratoria": {
+        "dinamica_tom": "Oratória Flutuante (Instrução Didática ao Clamor Pentecostal)",
+        "sentimento_predominante": "Clamor Espiritual & Contrição",
+        "glossario_pastoral_bordoes": [
+          "Glória a Deus",
+          "Aleluia",
+          "Receba aí"
+        ],
+        "altar_call_apelo": {
+          "start_sec": 2700.0,
+          "end_sec": 3060.0,
+          "tipo": "Entrega e Reconciliação"
+        },
+        "oracao_cura_libertacao": {
+          "start_sec": 2880.0,
+          "end_sec": 3240.0,
+          "tipo": "Clamor por Milagres"
+        },
+        "elementos_sagrados": [
+          "Palavra de Fé"
+        ],
+        "diagnostico_tecnico_audio": "Excelente clareza vocal e captação estável"
+      },
+      "louvor_adoracao": {
+        "repertorio_louvores": [
+          "Porque Ele Vive (Harpa Cristã)",
+          "Todavia Me Alegrarei",
+          "Ruja o Leão",
+          "Vem Com Josué Lutar em Jericó"
+        ],
+        "bloco_louvor_timings": {
+          "start_sec": 0.0,
+          "end_sec": 1260.0
+        },
+        "momentos_adoracao_espontanea": [
+          {
+            "start_sec": 600.0,
+            "end_sec": 900.0,
+            "descricao": "Cântico Espontâneo e Clamor de Adoração"
+          }
+        ]
+      },
+      "kits_midia_social": {
+        "score_potencial_viral": 83,
+        "frases_impacto_ganchos": [
+          {
+            "quote": "Deus não te trouxeste até aqui para parar, Ele tem um novo decreto para a sua casa!",
+            "start_sec": 1200.0,
+            "end_sec": 1260.0,
+            "potencial_shorts_9_16": true
+          },
+          {
+            "quote": "Mantenha a posição de oração, porque o milagre que você precisa já está a caminho!",
+            "start_sec": 1800.0,
+            "end_sec": 1850.0,
+            "potencial_shorts_9_16": true
+          }
+        ],
+        "linha_do_tempo_etapas": {
+          "abertura_louvor": "00:00 - 00:30",
+          "pregacao_palavra": "00:30 - 01:20",
+          "apelo_altar": "01:20 - 01:35",
+          "avisos_oferta": "01:35 - 01:45"
+        },
+        "thumbnail_titulo_sugerido": "CULTO DE CELEBRAÇÃO E",
+        "legenda_instagram_formatada": "🔥 Culto de Celebração e Pregação #1 - IBPM CR - Igreja IBPM CR!\n\nUma palavra profética de poder e restauração para o seu coração. Assista e compartilhe com a sua família!\n\n📍 Venha cultuar conosco em Campo Grande - RJ!\n🗓️ Domingos às 18h | Quartas Proféticas às 19:30h\n\n#IBPMCR #CampoGrandeRJ #Fé #Oração #PalavraDeDeus #Milagre",
+        "copywriting_geolocalizado_rio": "Morador de Campo Grande - RJ e região! Se você precisa de uma resposta de Deus e um ambiente de fé e acolhimento para a sua família, venha nos fazer uma visita na Igreja Batista Pentecostal Mundial (IBPM CR). O culto de Culto de Celebração e Pregação #1 - IBPM CR vai impactar a sua vida!"
+      },
+      "comunicacao_pastoral_rag": {
+        "resumo_pastoral_paragrafo": "No culto 'Culto de Celebração e Pregação #1 - IBPM CR', a igreja foi edificada através de uma palavra profunda sobre a fidelidade de Deus e o poder da oração perseverante. Um momento marcante de renovação espiritual para toda a comunidade IBPM CR.",
+        "palavra_profetica_semana_tags": [
+          "Fé",
+          "Restituição",
+          "Oração",
+          "Vitória",
+          "Avivamento"
+        ],
+        "roteiro_estudo_celulas": [
+          "1. De que maneira a palavra pregada hoje falou ao seu coração em relação à sua vida de oração?",
+          "2. Qual foi o principal versículo ou ensino que mais te marcou nesta mensagem?",
+          "3. Como podemos aplicar em prática os ensinamentos deste culto durante esta semana?",
+          "4. Qual motivo de oração nós podemos levantar juntos em grupo hoje?"
+        ],
+        "potencial_ebook_pdf": {
+          "apropriado": true,
+          "score": 85,
+          "recomendacao": "Excelente para capítulo de livro sobre oração"
+        },
+        "potencial_podcast_spotify": {
+          "apropriado": true,
+          "qualidade_audio": "Alta clareza vocal"
+        },
+        "chunks_indexados_rag": [
+          {
+            "chunk_index": 1,
+            "start_sec": 0.0,
+            "end_sec": 300.0,
+            "texto_chunk": "Abertura e saudações do culto 'Culto de Celebração e Pregação #1 - IBPM CR'. Mensagem edificante ministrada por Pastor Titular (IBPM CR).",
+            "tema_predominante": "Abertura e Louvor",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          },
+          {
+            "chunk_index": 2,
+            "start_sec": 305.0,
+            "end_sec": 1500.0,
+            "texto_chunk": "Exposição da palavra de Deus centrada em fé, restauração da família e clamor por milagres em Culto de Celebração e Pregação #1 - IBPM CR.",
+            "tema_predominante": "Pregação da Palavra",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          },
+          {
+            "chunk_index": 3,
+            "start_sec": 1505.0,
+            "end_sec": 3600.0,
+            "texto_chunk": "Momento de oração pelos enfermos, chamado ao altar e bênção final na IBPM CR.",
+            "tema_predominante": "Oração & Altar",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          }
+        ]
+      },
+      "rag_chunks_teologicos": [
+        {
+          "chunk_index": 1,
+          "start_sec": 0.0,
+          "end_sec": 300.0,
+          "texto_chunk": "Abertura e saudações do culto 'Culto de Celebração e Pregação #1 - IBPM CR'. Mensagem edificante ministrada por Pastor Titular (IBPM CR).",
+          "tema_predominante": "Abertura e Louvor",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "start_sec": 305.0,
+          "end_sec": 1500.0,
+          "texto_chunk": "Exposição da palavra de Deus centrada em fé, restauração da família e clamor por milagres em Culto de Celebração e Pregação #1 - IBPM CR.",
+          "tema_predominante": "Pregação da Palavra",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        },
+        {
+          "chunk_index": 3,
+          "start_sec": 1505.0,
+          "end_sec": 3600.0,
+          "texto_chunk": "Momento de oração pelos enfermos, chamado ao altar e bênção final na IBPM CR.",
+          "tema_predominante": "Oração & Altar",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        }
+      ],
+      "metadata": {
+        "video_id": "ibpm_live_001",
+        "titulo_original": "Culto de Celebração e Pregação #1 - IBPM CR",
+        "data_publicacao": "2026-06-10T17:02:15.022828+00:00",
+        "duracao_segundos": 5400,
+        "visualizacoes": 315,
+        "likes": 26,
+        "quantidade_comentarios": 5,
+        "descricao": "Transmissão ao vivo do culto da Igreja Batista Pentecostal Mundial.",
+        "url": "https://www.youtube.com/watch?v=ibpm_live_001"
+      }
+    },
+    "ibpm_live_002": {
+      "homiletica_teologia": {
+        "pregador": "Pastor Titular (IBPM CR)",
+        "serie_campanha": "Culto de Celebração",
+        "estilo_homiletico": "Profética / Exortação Espiritual",
+        "referencias_biblicas": [
+          "Salmos",
+          "Atos",
+          "Isaías",
+          "João"
+        ],
+        "proporcao_at_nt": {
+          "AT": 40,
+          "NT": 60
+        },
+        "ilustracoes_testemunhos": [
+          "Ilustração de fé e perseverança na jornada cristã"
+        ],
+        "analise_sazonal": "Ciclo Comum de Cultos"
+      },
+      "liturgia_oratoria": {
+        "dinamica_tom": "Oratória Flutuante (Instrução Didática ao Clamor Pentecostal)",
+        "sentimento_predominante": "Clamor Espiritual & Contrição",
+        "glossario_pastoral_bordoes": [
+          "Glória a Deus",
+          "Aleluia",
+          "Receba aí"
+        ],
+        "altar_call_apelo": {
+          "start_sec": 2700.0,
+          "end_sec": 3060.0,
+          "tipo": "Entrega e Reconciliação"
+        },
+        "oracao_cura_libertacao": {
+          "start_sec": 2880.0,
+          "end_sec": 3240.0,
+          "tipo": "Clamor por Milagres"
+        },
+        "elementos_sagrados": [
+          "Palavra de Fé"
+        ],
+        "diagnostico_tecnico_audio": "Excelente clareza vocal e captação estável"
+      },
+      "louvor_adoracao": {
+        "repertorio_louvores": [
+          "Porque Ele Vive (Harpa Cristã)",
+          "Todavia Me Alegrarei",
+          "Ruja o Leão",
+          "Vem Com Josué Lutar em Jericó"
+        ],
+        "bloco_louvor_timings": {
+          "start_sec": 0.0,
+          "end_sec": 1260.0
+        },
+        "momentos_adoracao_espontanea": [
+          {
+            "start_sec": 600.0,
+            "end_sec": 900.0,
+            "descricao": "Cântico Espontâneo e Clamor de Adoração"
+          }
+        ]
+      },
+      "kits_midia_social": {
+        "score_potencial_viral": 87,
+        "frases_impacto_ganchos": [
+          {
+            "quote": "Deus não te trouxeste até aqui para parar, Ele tem um novo decreto para a sua casa!",
+            "start_sec": 1200.0,
+            "end_sec": 1260.0,
+            "potencial_shorts_9_16": true
+          },
+          {
+            "quote": "Mantenha a posição de oração, porque o milagre que você precisa já está a caminho!",
+            "start_sec": 1800.0,
+            "end_sec": 1850.0,
+            "potencial_shorts_9_16": true
+          }
+        ],
+        "linha_do_tempo_etapas": {
+          "abertura_louvor": "00:00 - 00:30",
+          "pregacao_palavra": "00:30 - 01:20",
+          "apelo_altar": "01:20 - 01:35",
+          "avisos_oferta": "01:35 - 01:45"
+        },
+        "thumbnail_titulo_sugerido": "CULTO DE CELEBRAÇÃO E",
+        "legenda_instagram_formatada": "🔥 Culto de Celebração e Pregação #2 - IBPM CR - Igreja IBPM CR!\n\nUma palavra profética de poder e restauração para o seu coração. Assista e compartilhe com a sua família!\n\n📍 Venha cultuar conosco em Campo Grande - RJ!\n🗓️ Domingos às 18h | Quartas Proféticas às 19:30h\n\n#IBPMCR #CampoGrandeRJ #Fé #Oração #PalavraDeDeus #Milagre",
+        "copywriting_geolocalizado_rio": "Morador de Campo Grande - RJ e região! Se você precisa de uma resposta de Deus e um ambiente de fé e acolhimento para a sua família, venha nos fazer uma visita na Igreja Batista Pentecostal Mundial (IBPM CR). O culto de Culto de Celebração e Pregação #2 - IBPM CR vai impactar a sua vida!"
+      },
+      "comunicacao_pastoral_rag": {
+        "resumo_pastoral_paragrafo": "No culto 'Culto de Celebração e Pregação #2 - IBPM CR', a igreja foi edificada através de uma palavra profunda sobre a fidelidade de Deus e o poder da oração perseverante. Um momento marcante de renovação espiritual para toda a comunidade IBPM CR.",
+        "palavra_profetica_semana_tags": [
+          "Fé",
+          "Restituição",
+          "Oração",
+          "Vitória",
+          "Avivamento"
+        ],
+        "roteiro_estudo_celulas": [
+          "1. De que maneira a palavra pregada hoje falou ao seu coração em relação à sua vida de oração?",
+          "2. Qual foi o principal versículo ou ensino que mais te marcou nesta mensagem?",
+          "3. Como podemos aplicar em prática os ensinamentos deste culto durante esta semana?",
+          "4. Qual motivo de oração nós podemos levantar juntos em grupo hoje?"
+        ],
+        "potencial_ebook_pdf": {
+          "apropriado": true,
+          "score": 85,
+          "recomendacao": "Excelente para capítulo de livro sobre oração"
+        },
+        "potencial_podcast_spotify": {
+          "apropriado": true,
+          "qualidade_audio": "Alta clareza vocal"
+        },
+        "chunks_indexados_rag": [
+          {
+            "chunk_index": 1,
+            "start_sec": 0.0,
+            "end_sec": 300.0,
+            "texto_chunk": "Abertura e saudações do culto 'Culto de Celebração e Pregação #2 - IBPM CR'. Mensagem edificante ministrada por Pastor Titular (IBPM CR).",
+            "tema_predominante": "Abertura e Louvor",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          },
+          {
+            "chunk_index": 2,
+            "start_sec": 305.0,
+            "end_sec": 1500.0,
+            "texto_chunk": "Exposição da palavra de Deus centrada em fé, restauração da família e clamor por milagres em Culto de Celebração e Pregação #2 - IBPM CR.",
+            "tema_predominante": "Pregação da Palavra",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          },
+          {
+            "chunk_index": 3,
+            "start_sec": 1505.0,
+            "end_sec": 3600.0,
+            "texto_chunk": "Momento de oração pelos enfermos, chamado ao altar e bênção final na IBPM CR.",
+            "tema_predominante": "Oração & Altar",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          }
+        ]
+      },
+      "rag_chunks_teologicos": [
+        {
+          "chunk_index": 1,
+          "start_sec": 0.0,
+          "end_sec": 300.0,
+          "texto_chunk": "Abertura e saudações do culto 'Culto de Celebração e Pregação #2 - IBPM CR'. Mensagem edificante ministrada por Pastor Titular (IBPM CR).",
+          "tema_predominante": "Abertura e Louvor",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "start_sec": 305.0,
+          "end_sec": 1500.0,
+          "texto_chunk": "Exposição da palavra de Deus centrada em fé, restauração da família e clamor por milagres em Culto de Celebração e Pregação #2 - IBPM CR.",
+          "tema_predominante": "Pregação da Palavra",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        },
+        {
+          "chunk_index": 3,
+          "start_sec": 1505.0,
+          "end_sec": 3600.0,
+          "texto_chunk": "Momento de oração pelos enfermos, chamado ao altar e bênção final na IBPM CR.",
+          "tema_predominante": "Oração & Altar",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        }
+      ],
+      "metadata": {
+        "video_id": "ibpm_live_002",
+        "titulo_original": "Culto de Celebração e Pregação #2 - IBPM CR",
+        "data_publicacao": "2026-06-17T17:02:15.022828+00:00",
+        "duracao_segundos": 5400,
+        "visualizacoes": 330,
+        "likes": 27,
+        "quantidade_comentarios": 5,
+        "descricao": "Transmissão ao vivo do culto da Igreja Batista Pentecostal Mundial.",
+        "url": "https://www.youtube.com/watch?v=ibpm_live_002"
+      }
+    },
+    "ibpm_live_003": {
+      "homiletica_teologia": {
+        "pregador": "Pastor Titular (IBPM CR)",
+        "serie_campanha": "Culto de Celebração",
+        "estilo_homiletico": "Profética / Exortação Espiritual",
+        "referencias_biblicas": [
+          "Salmos",
+          "Atos",
+          "Isaías",
+          "João"
+        ],
+        "proporcao_at_nt": {
+          "AT": 40,
+          "NT": 60
+        },
+        "ilustracoes_testemunhos": [
+          "Ilustração de fé e perseverança na jornada cristã"
+        ],
+        "analise_sazonal": "Ciclo Comum de Cultos"
+      },
+      "liturgia_oratoria": {
+        "dinamica_tom": "Oratória Flutuante (Instrução Didática ao Clamor Pentecostal)",
+        "sentimento_predominante": "Clamor Espiritual & Contrição",
+        "glossario_pastoral_bordoes": [
+          "Glória a Deus",
+          "Aleluia",
+          "Receba aí"
+        ],
+        "altar_call_apelo": {
+          "start_sec": 2700.0,
+          "end_sec": 3060.0,
+          "tipo": "Entrega e Reconciliação"
+        },
+        "oracao_cura_libertacao": {
+          "start_sec": 2880.0,
+          "end_sec": 3240.0,
+          "tipo": "Clamor por Milagres"
+        },
+        "elementos_sagrados": [
+          "Palavra de Fé"
+        ],
+        "diagnostico_tecnico_audio": "Excelente clareza vocal e captação estável"
+      },
+      "louvor_adoracao": {
+        "repertorio_louvores": [
+          "Porque Ele Vive (Harpa Cristã)",
+          "Todavia Me Alegrarei",
+          "Ruja o Leão",
+          "Vem Com Josué Lutar em Jericó"
+        ],
+        "bloco_louvor_timings": {
+          "start_sec": 0.0,
+          "end_sec": 1260.0
+        },
+        "momentos_adoracao_espontanea": [
+          {
+            "start_sec": 600.0,
+            "end_sec": 900.0,
+            "descricao": "Cântico Espontâneo e Clamor de Adoração"
+          }
+        ]
+      },
+      "kits_midia_social": {
+        "score_potencial_viral": 90,
+        "frases_impacto_ganchos": [
+          {
+            "quote": "Deus não te trouxeste até aqui para parar, Ele tem um novo decreto para a sua casa!",
+            "start_sec": 1200.0,
+            "end_sec": 1260.0,
+            "potencial_shorts_9_16": true
+          },
+          {
+            "quote": "Mantenha a posição de oração, porque o milagre que você precisa já está a caminho!",
+            "start_sec": 1800.0,
+            "end_sec": 1850.0,
+            "potencial_shorts_9_16": true
+          }
+        ],
+        "linha_do_tempo_etapas": {
+          "abertura_louvor": "00:00 - 00:30",
+          "pregacao_palavra": "00:30 - 01:20",
+          "apelo_altar": "01:20 - 01:35",
+          "avisos_oferta": "01:35 - 01:45"
+        },
+        "thumbnail_titulo_sugerido": "CULTO DE CELEBRAÇÃO E",
+        "legenda_instagram_formatada": "🔥 Culto de Celebração e Pregação #3 - IBPM CR - Igreja IBPM CR!\n\nUma palavra profética de poder e restauração para o seu coração. Assista e compartilhe com a sua família!\n\n📍 Venha cultuar conosco em Campo Grande - RJ!\n🗓️ Domingos às 18h | Quartas Proféticas às 19:30h\n\n#IBPMCR #CampoGrandeRJ #Fé #Oração #PalavraDeDeus #Milagre",
+        "copywriting_geolocalizado_rio": "Morador de Campo Grande - RJ e região! Se você precisa de uma resposta de Deus e um ambiente de fé e acolhimento para a sua família, venha nos fazer uma visita na Igreja Batista Pentecostal Mundial (IBPM CR). O culto de Culto de Celebração e Pregação #3 - IBPM CR vai impactar a sua vida!"
+      },
+      "comunicacao_pastoral_rag": {
+        "resumo_pastoral_paragrafo": "No culto 'Culto de Celebração e Pregação #3 - IBPM CR', a igreja foi edificada através de uma palavra profunda sobre a fidelidade de Deus e o poder da oração perseverante. Um momento marcante de renovação espiritual para toda a comunidade IBPM CR.",
+        "palavra_profetica_semana_tags": [
+          "Fé",
+          "Restituição",
+          "Oração",
+          "Vitória",
+          "Avivamento"
+        ],
+        "roteiro_estudo_celulas": [
+          "1. De que maneira a palavra pregada hoje falou ao seu coração em relação à sua vida de oração?",
+          "2. Qual foi o principal versículo ou ensino que mais te marcou nesta mensagem?",
+          "3. Como podemos aplicar em prática os ensinamentos deste culto durante esta semana?",
+          "4. Qual motivo de oração nós podemos levantar juntos em grupo hoje?"
+        ],
+        "potencial_ebook_pdf": {
+          "apropriado": true,
+          "score": 85,
+          "recomendacao": "Excelente para capítulo de livro sobre oração"
+        },
+        "potencial_podcast_spotify": {
+          "apropriado": true,
+          "qualidade_audio": "Alta clareza vocal"
+        },
+        "chunks_indexados_rag": [
+          {
+            "chunk_index": 1,
+            "start_sec": 0.0,
+            "end_sec": 300.0,
+            "texto_chunk": "Abertura e saudações do culto 'Culto de Celebração e Pregação #3 - IBPM CR'. Mensagem edificante ministrada por Pastor Titular (IBPM CR).",
+            "tema_predominante": "Abertura e Louvor",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          },
+          {
+            "chunk_index": 2,
+            "start_sec": 305.0,
+            "end_sec": 1500.0,
+            "texto_chunk": "Exposição da palavra de Deus centrada em fé, restauração da família e clamor por milagres em Culto de Celebração e Pregação #3 - IBPM CR.",
+            "tema_predominante": "Pregação da Palavra",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          },
+          {
+            "chunk_index": 3,
+            "start_sec": 1505.0,
+            "end_sec": 3600.0,
+            "texto_chunk": "Momento de oração pelos enfermos, chamado ao altar e bênção final na IBPM CR.",
+            "tema_predominante": "Oração & Altar",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          }
+        ]
+      },
+      "rag_chunks_teologicos": [
+        {
+          "chunk_index": 1,
+          "start_sec": 0.0,
+          "end_sec": 300.0,
+          "texto_chunk": "Abertura e saudações do culto 'Culto de Celebração e Pregação #3 - IBPM CR'. Mensagem edificante ministrada por Pastor Titular (IBPM CR).",
+          "tema_predominante": "Abertura e Louvor",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "start_sec": 305.0,
+          "end_sec": 1500.0,
+          "texto_chunk": "Exposição da palavra de Deus centrada em fé, restauração da família e clamor por milagres em Culto de Celebração e Pregação #3 - IBPM CR.",
+          "tema_predominante": "Pregação da Palavra",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        },
+        {
+          "chunk_index": 3,
+          "start_sec": 1505.0,
+          "end_sec": 3600.0,
+          "texto_chunk": "Momento de oração pelos enfermos, chamado ao altar e bênção final na IBPM CR.",
+          "tema_predominante": "Oração & Altar",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        }
+      ],
+      "metadata": {
+        "video_id": "ibpm_live_003",
+        "titulo_original": "Culto de Celebração e Pregação #3 - IBPM CR",
+        "data_publicacao": "2026-06-24T17:02:15.022828+00:00",
+        "duracao_segundos": 5400,
+        "visualizacoes": 345,
+        "likes": 28,
+        "quantidade_comentarios": 5,
+        "descricao": "Transmissão ao vivo do culto da Igreja Batista Pentecostal Mundial.",
+        "url": "https://www.youtube.com/watch?v=ibpm_live_003"
+      }
+    },
+    "ibpm_live_004": {
+      "homiletica_teologia": {
+        "pregador": "Pastor Titular (IBPM CR)",
+        "serie_campanha": "Culto de Celebração",
+        "estilo_homiletico": "Profética / Exortação Espiritual",
+        "referencias_biblicas": [
+          "Salmos",
+          "Atos",
+          "Isaías",
+          "João"
+        ],
+        "proporcao_at_nt": {
+          "AT": 40,
+          "NT": 60
+        },
+        "ilustracoes_testemunhos": [
+          "Ilustração de fé e perseverança na jornada cristã"
+        ],
+        "analise_sazonal": "Ciclo Comum de Cultos"
+      },
+      "liturgia_oratoria": {
+        "dinamica_tom": "Oratória Flutuante (Instrução Didática ao Clamor Pentecostal)",
+        "sentimento_predominante": "Clamor Espiritual & Contrição",
+        "glossario_pastoral_bordoes": [
+          "Glória a Deus",
+          "Aleluia",
+          "Receba aí"
+        ],
+        "altar_call_apelo": {
+          "start_sec": 2700.0,
+          "end_sec": 3060.0,
+          "tipo": "Entrega e Reconciliação"
+        },
+        "oracao_cura_libertacao": {
+          "start_sec": 2880.0,
+          "end_sec": 3240.0,
+          "tipo": "Clamor por Milagres"
+        },
+        "elementos_sagrados": [
+          "Palavra de Fé"
+        ],
+        "diagnostico_tecnico_audio": "Excelente clareza vocal e captação estável"
+      },
+      "louvor_adoracao": {
+        "repertorio_louvores": [
+          "Porque Ele Vive (Harpa Cristã)",
+          "Todavia Me Alegrarei",
+          "Ruja o Leão",
+          "Vem Com Josué Lutar em Jericó"
+        ],
+        "bloco_louvor_timings": {
+          "start_sec": 0.0,
+          "end_sec": 1260.0
+        },
+        "momentos_adoracao_espontanea": [
+          {
+            "start_sec": 600.0,
+            "end_sec": 900.0,
+            "descricao": "Cântico Espontâneo e Clamor de Adoração"
+          }
+        ]
+      },
+      "kits_midia_social": {
+        "score_potencial_viral": 94,
+        "frases_impacto_ganchos": [
+          {
+            "quote": "Deus não te trouxeste até aqui para parar, Ele tem um novo decreto para a sua casa!",
+            "start_sec": 1200.0,
+            "end_sec": 1260.0,
+            "potencial_shorts_9_16": true
+          },
+          {
+            "quote": "Mantenha a posição de oração, porque o milagre que você precisa já está a caminho!",
+            "start_sec": 1800.0,
+            "end_sec": 1850.0,
+            "potencial_shorts_9_16": true
+          }
+        ],
+        "linha_do_tempo_etapas": {
+          "abertura_louvor": "00:00 - 00:30",
+          "pregacao_palavra": "00:30 - 01:20",
+          "apelo_altar": "01:20 - 01:35",
+          "avisos_oferta": "01:35 - 01:45"
+        },
+        "thumbnail_titulo_sugerido": "CULTO DE CELEBRAÇÃO E",
+        "legenda_instagram_formatada": "🔥 Culto de Celebração e Pregação #4 - IBPM CR - Igreja IBPM CR!\n\nUma palavra profética de poder e restauração para o seu coração. Assista e compartilhe com a sua família!\n\n📍 Venha cultuar conosco em Campo Grande - RJ!\n🗓️ Domingos às 18h | Quartas Proféticas às 19:30h\n\n#IBPMCR #CampoGrandeRJ #Fé #Oração #PalavraDeDeus #Milagre",
+        "copywriting_geolocalizado_rio": "Morador de Campo Grande - RJ e região! Se você precisa de uma resposta de Deus e um ambiente de fé e acolhimento para a sua família, venha nos fazer uma visita na Igreja Batista Pentecostal Mundial (IBPM CR). O culto de Culto de Celebração e Pregação #4 - IBPM CR vai impactar a sua vida!"
+      },
+      "comunicacao_pastoral_rag": {
+        "resumo_pastoral_paragrafo": "No culto 'Culto de Celebração e Pregação #4 - IBPM CR', a igreja foi edificada através de uma palavra profunda sobre a fidelidade de Deus e o poder da oração perseverante. Um momento marcante de renovação espiritual para toda a comunidade IBPM CR.",
+        "palavra_profetica_semana_tags": [
+          "Fé",
+          "Restituição",
+          "Oração",
+          "Vitória",
+          "Avivamento"
+        ],
+        "roteiro_estudo_celulas": [
+          "1. De que maneira a palavra pregada hoje falou ao seu coração em relação à sua vida de oração?",
+          "2. Qual foi o principal versículo ou ensino que mais te marcou nesta mensagem?",
+          "3. Como podemos aplicar em prática os ensinamentos deste culto durante esta semana?",
+          "4. Qual motivo de oração nós podemos levantar juntos em grupo hoje?"
+        ],
+        "potencial_ebook_pdf": {
+          "apropriado": true,
+          "score": 85,
+          "recomendacao": "Excelente para capítulo de livro sobre oração"
+        },
+        "potencial_podcast_spotify": {
+          "apropriado": true,
+          "qualidade_audio": "Alta clareza vocal"
+        },
+        "chunks_indexados_rag": [
+          {
+            "chunk_index": 1,
+            "start_sec": 0.0,
+            "end_sec": 300.0,
+            "texto_chunk": "Abertura e saudações do culto 'Culto de Celebração e Pregação #4 - IBPM CR'. Mensagem edificante ministrada por Pastor Titular (IBPM CR).",
+            "tema_predominante": "Abertura e Louvor",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          },
+          {
+            "chunk_index": 2,
+            "start_sec": 305.0,
+            "end_sec": 1500.0,
+            "texto_chunk": "Exposição da palavra de Deus centrada em fé, restauração da família e clamor por milagres em Culto de Celebração e Pregação #4 - IBPM CR.",
+            "tema_predominante": "Pregação da Palavra",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          },
+          {
+            "chunk_index": 3,
+            "start_sec": 1505.0,
+            "end_sec": 3600.0,
+            "texto_chunk": "Momento de oração pelos enfermos, chamado ao altar e bênção final na IBPM CR.",
+            "tema_predominante": "Oração & Altar",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          }
+        ]
+      },
+      "rag_chunks_teologicos": [
+        {
+          "chunk_index": 1,
+          "start_sec": 0.0,
+          "end_sec": 300.0,
+          "texto_chunk": "Abertura e saudações do culto 'Culto de Celebração e Pregação #4 - IBPM CR'. Mensagem edificante ministrada por Pastor Titular (IBPM CR).",
+          "tema_predominante": "Abertura e Louvor",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "start_sec": 305.0,
+          "end_sec": 1500.0,
+          "texto_chunk": "Exposição da palavra de Deus centrada em fé, restauração da família e clamor por milagres em Culto de Celebração e Pregação #4 - IBPM CR.",
+          "tema_predominante": "Pregação da Palavra",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        },
+        {
+          "chunk_index": 3,
+          "start_sec": 1505.0,
+          "end_sec": 3600.0,
+          "texto_chunk": "Momento de oração pelos enfermos, chamado ao altar e bênção final na IBPM CR.",
+          "tema_predominante": "Oração & Altar",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        }
+      ],
+      "metadata": {
+        "video_id": "ibpm_live_004",
+        "titulo_original": "Culto de Celebração e Pregação #4 - IBPM CR",
+        "data_publicacao": "2026-07-01T17:02:15.022828+00:00",
+        "duracao_segundos": 5400,
+        "visualizacoes": 360,
+        "likes": 29,
+        "quantidade_comentarios": 5,
+        "descricao": "Transmissão ao vivo do culto da Igreja Batista Pentecostal Mundial.",
+        "url": "https://www.youtube.com/watch?v=ibpm_live_004"
+      }
+    },
+    "ibpm_live_005": {
+      "homiletica_teologia": {
+        "pregador": "Pastor Titular (IBPM CR)",
+        "serie_campanha": "Culto de Celebração",
+        "estilo_homiletico": "Profética / Exortação Espiritual",
+        "referencias_biblicas": [
+          "Salmos",
+          "Atos",
+          "Isaías",
+          "João"
+        ],
+        "proporcao_at_nt": {
+          "AT": 40,
+          "NT": 60
+        },
+        "ilustracoes_testemunhos": [
+          "Ilustração de fé e perseverança na jornada cristã"
+        ],
+        "analise_sazonal": "Ciclo Comum de Cultos"
+      },
+      "liturgia_oratoria": {
+        "dinamica_tom": "Oratória Flutuante (Instrução Didática ao Clamor Pentecostal)",
+        "sentimento_predominante": "Clamor Espiritual & Contrição",
+        "glossario_pastoral_bordoes": [
+          "Glória a Deus",
+          "Aleluia",
+          "Receba aí"
+        ],
+        "altar_call_apelo": {
+          "start_sec": 2700.0,
+          "end_sec": 3060.0,
+          "tipo": "Entrega e Reconciliação"
+        },
+        "oracao_cura_libertacao": {
+          "start_sec": 2880.0,
+          "end_sec": 3240.0,
+          "tipo": "Clamor por Milagres"
+        },
+        "elementos_sagrados": [
+          "Palavra de Fé"
+        ],
+        "diagnostico_tecnico_audio": "Excelente clareza vocal e captação estável"
+      },
+      "louvor_adoracao": {
+        "repertorio_louvores": [
+          "Porque Ele Vive (Harpa Cristã)",
+          "Todavia Me Alegrarei",
+          "Ruja o Leão",
+          "Vem Com Josué Lutar em Jericó"
+        ],
+        "bloco_louvor_timings": {
+          "start_sec": 0.0,
+          "end_sec": 1260.0
+        },
+        "momentos_adoracao_espontanea": [
+          {
+            "start_sec": 600.0,
+            "end_sec": 900.0,
+            "descricao": "Cântico Espontâneo e Clamor de Adoração"
+          }
+        ]
+      },
+      "kits_midia_social": {
+        "score_potencial_viral": 97,
+        "frases_impacto_ganchos": [
+          {
+            "quote": "Deus não te trouxeste até aqui para parar, Ele tem um novo decreto para a sua casa!",
+            "start_sec": 1200.0,
+            "end_sec": 1260.0,
+            "potencial_shorts_9_16": true
+          },
+          {
+            "quote": "Mantenha a posição de oração, porque o milagre que você precisa já está a caminho!",
+            "start_sec": 1800.0,
+            "end_sec": 1850.0,
+            "potencial_shorts_9_16": true
+          }
+        ],
+        "linha_do_tempo_etapas": {
+          "abertura_louvor": "00:00 - 00:30",
+          "pregacao_palavra": "00:30 - 01:20",
+          "apelo_altar": "01:20 - 01:35",
+          "avisos_oferta": "01:35 - 01:45"
+        },
+        "thumbnail_titulo_sugerido": "CULTO DE CELEBRAÇÃO E",
+        "legenda_instagram_formatada": "🔥 Culto de Celebração e Pregação #5 - IBPM CR - Igreja IBPM CR!\n\nUma palavra profética de poder e restauração para o seu coração. Assista e compartilhe com a sua família!\n\n📍 Venha cultuar conosco em Campo Grande - RJ!\n🗓️ Domingos às 18h | Quartas Proféticas às 19:30h\n\n#IBPMCR #CampoGrandeRJ #Fé #Oração #PalavraDeDeus #Milagre",
+        "copywriting_geolocalizado_rio": "Morador de Campo Grande - RJ e região! Se você precisa de uma resposta de Deus e um ambiente de fé e acolhimento para a sua família, venha nos fazer uma visita na Igreja Batista Pentecostal Mundial (IBPM CR). O culto de Culto de Celebração e Pregação #5 - IBPM CR vai impactar a sua vida!"
+      },
+      "comunicacao_pastoral_rag": {
+        "resumo_pastoral_paragrafo": "No culto 'Culto de Celebração e Pregação #5 - IBPM CR', a igreja foi edificada através de uma palavra profunda sobre a fidelidade de Deus e o poder da oração perseverante. Um momento marcante de renovação espiritual para toda a comunidade IBPM CR.",
+        "palavra_profetica_semana_tags": [
+          "Fé",
+          "Restituição",
+          "Oração",
+          "Vitória",
+          "Avivamento"
+        ],
+        "roteiro_estudo_celulas": [
+          "1. De que maneira a palavra pregada hoje falou ao seu coração em relação à sua vida de oração?",
+          "2. Qual foi o principal versículo ou ensino que mais te marcou nesta mensagem?",
+          "3. Como podemos aplicar em prática os ensinamentos deste culto durante esta semana?",
+          "4. Qual motivo de oração nós podemos levantar juntos em grupo hoje?"
+        ],
+        "potencial_ebook_pdf": {
+          "apropriado": true,
+          "score": 85,
+          "recomendacao": "Excelente para capítulo de livro sobre oração"
+        },
+        "potencial_podcast_spotify": {
+          "apropriado": true,
+          "qualidade_audio": "Alta clareza vocal"
+        },
+        "chunks_indexados_rag": [
+          {
+            "chunk_index": 1,
+            "start_sec": 0.0,
+            "end_sec": 300.0,
+            "texto_chunk": "Abertura e saudações do culto 'Culto de Celebração e Pregação #5 - IBPM CR'. Mensagem edificante ministrada por Pastor Titular (IBPM CR).",
+            "tema_predominante": "Abertura e Louvor",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          },
+          {
+            "chunk_index": 2,
+            "start_sec": 305.0,
+            "end_sec": 1500.0,
+            "texto_chunk": "Exposição da palavra de Deus centrada em fé, restauração da família e clamor por milagres em Culto de Celebração e Pregação #5 - IBPM CR.",
+            "tema_predominante": "Pregação da Palavra",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          },
+          {
+            "chunk_index": 3,
+            "start_sec": 1505.0,
+            "end_sec": 3600.0,
+            "texto_chunk": "Momento de oração pelos enfermos, chamado ao altar e bênção final na IBPM CR.",
+            "tema_predominante": "Oração & Altar",
+            "pregador": "Pastor Titular (IBPM CR)",
+            "passagens_biblicas": [
+              "Salmos",
+              "Atos",
+              "Isaías",
+              "João"
+            ]
+          }
+        ]
+      },
+      "rag_chunks_teologicos": [
+        {
+          "chunk_index": 1,
+          "start_sec": 0.0,
+          "end_sec": 300.0,
+          "texto_chunk": "Abertura e saudações do culto 'Culto de Celebração e Pregação #5 - IBPM CR'. Mensagem edificante ministrada por Pastor Titular (IBPM CR).",
+          "tema_predominante": "Abertura e Louvor",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "start_sec": 305.0,
+          "end_sec": 1500.0,
+          "texto_chunk": "Exposição da palavra de Deus centrada em fé, restauração da família e clamor por milagres em Culto de Celebração e Pregação #5 - IBPM CR.",
+          "tema_predominante": "Pregação da Palavra",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        },
+        {
+          "chunk_index": 3,
+          "start_sec": 1505.0,
+          "end_sec": 3600.0,
+          "texto_chunk": "Momento de oração pelos enfermos, chamado ao altar e bênção final na IBPM CR.",
+          "tema_predominante": "Oração & Altar",
+          "pregador": "Pastor Titular (IBPM CR)",
+          "passagens_biblicas": [
+            "Salmos",
+            "Atos",
+            "Isaías",
+            "João"
+          ]
+        }
+      ],
+      "metadata": {
+        "video_id": "ibpm_live_005",
+        "titulo_original": "Culto de Celebração e Pregação #5 - IBPM CR",
+        "data_publicacao": "2026-07-08T17:02:15.022828+00:00",
+        "duracao_segundos": 5400,
+        "visualizacoes": 375,
+        "likes": 30,
+        "quantidade_comentarios": 5,
+        "descricao": "Transmissão ao vivo do culto da Igreja Batista Pentecostal Mundial.",
+        "url": "https://www.youtube.com/watch?v=ibpm_live_005"
+      }
+    }
+  }
+}
