@@ -162,20 +162,24 @@ class Phase1ReportGenerator:
 
             pdf.set_font("Helvetica", "B", 16)
             pdf.set_text_color(30, 58, 138)
-            pdf.cell(0, 10, "IBPM CR - Relatorio Diagnostico do Acervo (Fase 1)", 0, 1, "C")
+            title_text = "IBPM CR - Relatorio Diagnostico do Acervo (Fase 1)"
+            pdf.cell(190, 10, title_text, 0, 1, "C")
             pdf.ln(5)
 
             pdf.set_font("Helvetica", "", 10)
             pdf.set_text_color(50, 50, 50)
-            pdf.multi_cell(0, 6, f"Total de Videos Mapeados: {data['total_videos']}\nTotal de Horas Gravadas: {data['total_hours']}h\nCortes 9:16 Mapeados: {data['total_shorts_mapped']}\nCortes 16:9 Mapeados: {data['total_mediums_mapped']}\nE-books Potenciais: {data['total_ebooks_mapped']}\nAulas EBD Kids Mapeadas: {data['total_kids_mapped']}")
+            summary_txt = f"Total de Videos Mapeados: {data['total_videos']}\nTotal de Horas Gravadas: {data['total_hours']}h\nCortes 9:16 Mapeados: {data['total_shorts_mapped']}\nCortes 16:9 Mapeados: {data['total_mediums_mapped']}\nE-books Potenciais: {data['total_ebooks_mapped']}\nAulas EBD Kids Mapeadas: {data['total_kids_mapped']}"
+            pdf.multi_cell(190, 6, summary_txt.encode('latin-1', 'replace').decode('latin-1'))
             pdf.ln(5)
 
             pdf.set_font("Helvetica", "B", 12)
-            pdf.cell(0, 8, "Top 5 Videos com Maior Engajamento:", 0, 1, "L")
+            pdf.cell(190, 8, "Top 5 Videos com Maior Engajamento:", 0, 1, "L")
             pdf.set_font("Helvetica", "", 9)
 
             for i, v in enumerate(data["top_20"][:5], 1):
-                pdf.multi_cell(0, 5, f"{i}. {v.get('titulo_original', 'Culto')[:60]} - {v.get('visualizacoes', 0)} views")
+                raw_t = v.get("titulo_original", "Culto")[:60]
+                t_clean = raw_t.encode("latin-1", "replace").decode("latin-1")
+                pdf.multi_cell(190, 5, f"{i}. {t_clean} - {v.get('visualizacoes', 0)} views")
 
             pdf.output(filepath)
 

@@ -79,14 +79,21 @@ class BatchTranscriber:
             return target_path
 
         ydl_opts = {
-            'format': 'ba/b',
+            'format': 'm4a/bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '128',
             }],
             'outtmpl': os.path.join(output_dir, f"{video_id}.%(ext)s"),
-            'quiet': True
+            'quiet': True,
+            'nocheckcertificate': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web', 'mweb']
+                }
+            }
         }
 
         try:
