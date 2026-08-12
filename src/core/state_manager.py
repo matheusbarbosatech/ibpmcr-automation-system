@@ -93,7 +93,7 @@ class MasterPlanManager:
             row = cursor.fetchone()
             return row is not None
 
-    def update_video_analysis(self, video_id: str, metadata: Dict[str, Any], analysis: Dict[str, Any]) -> None:
+    def update_video_analysis(self, video_id: str, metadata: Dict[str, Any], analysis: Dict[str, Any], export_json: bool = True) -> None:
         """
         Salva ou atualiza a análise de um vídeo no SQLite com todos os 25 pilares de insights.
         """
@@ -177,8 +177,9 @@ class MasterPlanManager:
 
             conn.commit()
 
-        # Atualiza a cópia consolidada em JSON
-        self.export_master_json()
+        # Atualiza a cópia consolidada em JSON se solicitado
+        if export_json:
+            self.export_master_json()
 
     def export_master_json(self) -> str:
         """Exporta todo o estado do banco SQLite para o JSON Mestre."""

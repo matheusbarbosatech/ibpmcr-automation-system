@@ -1,22 +1,19 @@
-# Environment & Secrets
+# Secret Environment Variables (Do Not Commit)
 .env
-*.env
 
-# Python Bytecode & Cache
+# Python Virtual Environment
+venv/
+.venv/
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
 
-# Data Storage & Local Outputs
+# Local Data Storage & Audio
+data/audio_podcasts/
 data_storage/
-*.mp4
 *.mp3
-*.wav
-*.srt
-*.vtt
+*.m4a
 
-# IDE & OS Files
-.vscode/
+# Logs & IDE
 .idea/
-.DS_Store
-Thumbs.db
+.vscode/
+*.log
