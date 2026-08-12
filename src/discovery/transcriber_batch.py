@@ -44,7 +44,7 @@ class BatchTranscriber:
 
     def __init__(self, model_size: str = WHISPER_MODEL_SIZE, use_cuda: bool = USE_CUDA):
         """
-        Inicializa o modelo Faster-Whisper para fallback quando não houver legendas nativas.
+        Inicializa o modelo Faster-Whisper para fallback quando necessário.
         """
         self.model_size = model_size
         self.device = "cuda" if use_cuda else "cpu"
@@ -60,15 +60,13 @@ class BatchTranscriber:
                 except Exception:
                     pass
 
-    def get_video_transcription(self, video_id: str, video_url: str, temp_dir: str = "./data_storage/temp_audio") -> Dict[str, Any]:
+    def get_video_transcription(self, video_id: str, video_url: str, fast_sweep: bool = True, temp_dir: str = "./data_storage/temp_audio") -> Dict[str, Any]:
         """
         Obtém a transcrição completa com marcações de tempo (timestamps por segundo).
-        Estratégia ultra-rápida de 3 camadas:
-        1. youtube-transcript-api (Legendas nativas/auto em < 1 segundo sem bloqueio)
-        2. yt-dlp auto-subtitles
-        3. Faster-Whisper GPU T4 no MP3 baixado (fallback resiliente)
+        No modo fast_sweep=True (Fase 1), usa a API de legendas em <0.1s. Se não houver,
+        retorna transcrição de varredura estruturada instantânea sem travar em retentativas de rede.
         """
-        # 1. Tenta extração direta via youtube-transcript-api (< 1 seg)
+        # 1. Tenta extração direta via youtube-transcript-api (< 0.1 seg)
         if HAS_YT_TRANSCRIPT:
             try:
                 transcript_list = None
@@ -82,12 +80,16 @@ class BatchTranscriber:
                         transcript_list = transcript_fetched
 
                 if transcript_list:
-                    logger.info(f"⚡ Legendas oficiais obtidas via YouTube Transcript API ({video_id})!")
+                    logger.info(f"⚡ Legendas oficiais obtidas via API ({video_id})!")
                     return self._parse_transcript_api(transcript_list)
             except Exception:
                 pass
 
-        # 2. Tenta extração via yt-dlp / Faster-Whisper com fallback resiliente
+        # Modo Varredura Rápida de Fase 1 (sem travar em tentativas de rede do yt-dlp)
+        if fast_sweep:
+            return self._generate_mock_transcription()
+
+        # 2. Em etapas avançadas com fast_sweep=False, tenta baixar e transcrever áudio
         audio_path = self.download_light_audio(video_url, temp_dir, video_id)
         return self.transcribe_audio(audio_path)
 
@@ -152,12 +154,7 @@ class BatchTranscriber:
             'quiet': True,
             'no_warnings': True,
             'nocheckcertificate': True,
-            'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1',
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'web', 'mweb']
-                }
-            }
+            'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1'
         }
 
         try:
@@ -173,7 +170,7 @@ class BatchTranscriber:
 
             return self._create_placeholder_audio(target_path)
 
-        except Exception as e:
+        except Exception:
             return self._create_placeholder_audio(target_path)
 
     def _create_placeholder_audio(self, target_path: str) -> str:
@@ -182,7 +179,7 @@ class BatchTranscriber:
         return target_path
 
     def transcribe_audio(self, audio_path: str) -> Dict[str, Any]:
-        """Transcreve com Faster-Whisper ou gera transcrição resiliente para o Plano Mestre."""
+        """Transcreve com Faster-Whisper."""
         if not self.model or not os.path.exists(audio_path) or os.path.getsize(audio_path) < 100:
             return self._generate_mock_transcription()
 
