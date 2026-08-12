@@ -31,14 +31,9 @@ def sanitize_title(title: str) -> str:
     if not title:
         return "culto_ibpmcr"
     
-    # Normaliza unicode NFD (separa acentos dos caracteres)
     nfkd = unicodedata.normalize('NFKD', title)
     no_accents = "".join([c for c in nfkd if not unicodedata.combining(c)])
-    
-    # Converte para minúsculas e substitui caracteres não alfanuméricos por underline
     clean = re.sub(r'[^a-zA-Z0-9]+', '_', no_accents.lower()).strip('_')
-    
-    # Limita tamanho para evitar caminhos longos demais no Windows
     return clean[:60] if clean else "culto_ibpmcr"
 
 
@@ -52,7 +47,7 @@ class MasterPlanManager:
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -62,7 +57,6 @@ class MasterPlanManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            # Tabela principal de vídeos
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS videos (
                 video_id TEXT PRIMARY KEY,
@@ -96,7 +90,6 @@ class MasterPlanManager:
             )
             """)
 
-            # Garante colunas caso a tabela já existisse
             for col_def in [
                 ("indice_sequencial", "INTEGER"),
                 ("nome_arquivo_mp3", "TEXT"),
@@ -122,7 +115,7 @@ class MasterPlanManager:
         idx = metadata.get("indice_sequencial", 0)
         now_str = datetime.now(timezone.utc).isoformat()
 
-        date_str = str(metadata.get("data_publicacao", ""))[:10]
+        date_str = str(metadata.get("data_evento_real", metadata.get("data_publicacao", "")))[:10]
         clean_title = sanitize_title(metadata.get("titulo_original", ""))
         filename_mp3 = f"{idx:03d}_{date_str}_{v_id}_{clean_title}.mp3"
 
@@ -186,7 +179,6 @@ class MasterPlanManager:
                 if os.path.exists(row["caminho_audio"]) and os.path.getsize(row["caminho_audio"]) > 10000:
                     return True
 
-        # Verifica na pasta audio_podcasts se existe algum arquivo com aquele video_id no nome
         if os.path.exists(AUDIO_DIR):
             for fname in os.listdir(AUDIO_DIR):
                 if video_id in fname:
@@ -206,4 +198,4 @@ class MasterPlanManager:
 
 if __name__ == "__main__":
     mgr = MasterPlanManager()
-    print("MasterPlanManager (Etapa 1) pronto!")
+    print("MasterPlanManager com timeout de SQLite atualizado!")
