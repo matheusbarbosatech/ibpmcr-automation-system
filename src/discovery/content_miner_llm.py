@@ -19,12 +19,19 @@ sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 from config.settings import GROQ_API_KEY, GROQ_MODEL_NAME, GROQ_FALLBACK_MODELS, GEMINI_API_KEY
 
+# Suporte duplo para SDK novo (google-genai) e SDK padrão (google-generativeai)
 try:
     from google import genai
     from google.genai import types
-    HAS_GOOGLE_GENAI = True
+    HAS_NEW_GENAI = True
 except ImportError:
-    HAS_GOOGLE_GENAI = False
+    HAS_NEW_GENAI = False
+
+try:
+    import google.generativeai as google_genai_legacy
+    HAS_LEGACY_GENAI = True
+except ImportError:
+    HAS_LEGACY_GENAI = False
 
 try:
     from groq import Groq
@@ -100,15 +107,27 @@ class ContentMinerLLM:
         self.gemini_api_key = gemini_api_key or GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
         self.groq_api_key = groq_api_key or GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
         
-        self.gemini_client = None
+        self.gemini_new_client = None
+        self.gemini_legacy_model = None
         self.groq_client = None
 
-        if HAS_GOOGLE_GENAI and self.gemini_api_key:
+        if HAS_NEW_GENAI and self.gemini_api_key:
             try:
-                self.gemini_client = genai.Client(api_key=self.gemini_api_key)
-                logger.info("⚡ Conectado ao Google Gemini 1.5 Flash API.")
+                self.gemini_new_client = genai.Client(api_key=self.gemini_api_key)
+                logger.info("⚡ Conectado ao Google Gemini 1.5 Flash (SDK GenAI Novo).")
             except Exception as e:
-                logger.warning(f"⚠️ Erro ao inicializar Gemini Client: {e}")
+                logger.warning(f"⚠️ Aviso ao inicializar GenAI Novo: {e}")
+
+        if not self.gemini_new_client and HAS_LEGACY_GENAI and self.gemini_api_key:
+            try:
+                google_genai_legacy.configure(api_key=self.gemini_api_key)
+                self.gemini_legacy_model = google_genai_legacy.GenerativeModel(
+                    'gemini-1.5-flash',
+                    generation_config={"response_mime_type": "application/json", "temperature": 0.3}
+                )
+                logger.info("⚡ Conectado ao Google Gemini 1.5 Flash (SDK GenerativeAI).")
+            except Exception as e:
+                logger.warning(f"⚠️ Aviso ao inicializar GenerativeAI Legacy: {e}")
 
         if HAS_GROQ and self.groq_api_key:
             try:
@@ -128,11 +147,11 @@ class ContentMinerLLM:
         prompt_user = f"Título do Culto: {title}\n\nTexto Integral da Pregação:\n{text_content[:300000]}"
         insights = None
 
-        # 1. Tenta a API do Google Gemini 1.5 Flash
-        if self.gemini_client:
+        # 1. Tenta Gemini via SDK Novo
+        if self.gemini_new_client:
             try:
                 logger.info("⚡ Enviando pregação para o Google Gemini 1.5 Flash...")
-                response = self.gemini_client.models.generate_content(
+                response = self.gemini_new_client.models.generate_content(
                     model="gemini-1.5-flash",
                     contents=[PROMPT_SYSTEM, prompt_user],
                     config=types.GenerateContentConfig(
@@ -145,12 +164,28 @@ class ContentMinerLLM:
                 if response and response.text:
                     parsed = self._clean_and_parse_json(response.text)
                     if parsed:
-                        logger.info("✅ Insights minerados com sucesso via Gemini 1.5 Flash!")
+                        logger.info("✅ SUCESSO! Insights minerados via Gemini 1.5 Flash (Novo SDK).")
                         insights = parsed
             except Exception as e:
-                logger.warning(f"⚠️ Erro ou limite no Gemini API: {e}. Tentando Groq Cloud...")
+                logger.warning(f"⚠️ Erro no Gemini API (Novo SDK): {e}. Tentando SDK Padrão...")
 
-        # 2. Tenta os modelos Open-Source hospedados na Groq API (Fallback)
+        # 2. Tenta Gemini via SDK Padrão (google-generativeai)
+        if not insights and self.gemini_legacy_model:
+            try:
+                logger.info("⚡ Enviando pregação para o Google Gemini 1.5 Flash...")
+                prompt_full = f"{PROMPT_SYSTEM}\n\nTítulo do Culto: {title}\n\nPregação Integral:\n{text_content[:300000]}"
+                response = self.gemini_legacy_model.generate_content(prompt_full)
+                time.sleep(4.5)  # Freio ABS (15 RPM)
+
+                if response and response.text:
+                    parsed = self._clean_and_parse_json(response.text)
+                    if parsed:
+                        logger.info("✅ SUCESSO! Insights minerados via Gemini 1.5 Flash (SDK GenerativeAI).")
+                        insights = parsed
+            except Exception as e:
+                logger.warning(f"⚠️ Erro no Gemini API (SDK GenerativeAI): {e}. Tentando Groq Cloud...")
+
+        # 3. Tenta Groq API (Fallback Open-Source)
         if not insights and self.groq_client:
             for model_id in GROQ_FALLBACK_MODELS:
                 try:
@@ -179,17 +214,13 @@ class ContentMinerLLM:
             logger.info("ℹ️ Utilizando minerador de fallback estruturado.")
             insights = self._fallback_mining(title, text_content)
 
-        # 3. CRUZAMENTO DE TIMESTAMPS: Enriquece os cortes virais com start_sec e end_sec do .json
+        # 4. CRUZAMENTO DE TIMESTAMPS: Enriquece os cortes virais com start_sec e end_sec do .json
         if segments_data and isinstance(insights, dict) and "05_cortes_virais" in insights:
             insights["05_cortes_virais"] = self._enrich_cuts_with_timestamps(insights["05_cortes_virais"], segments_data)
 
         return insights
 
     def _enrich_cuts_with_timestamps(self, cuts: List[Dict[str, Any]], segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Localiza os segundos exatos de início (start_sec) e fim (end_sec) de cada corte viral
-        cruzando o texto do corte com os segmentos anotados do arquivo .json da Fase 2.
-        """
         for cut in cuts:
             init_phrase = cut.get("trecho_inicial", "").lower().strip()
             end_phrase = cut.get("trecho_final", "").lower().strip()
@@ -211,7 +242,6 @@ class ContentMinerLLM:
                         end_sec = seg.get("end_sec")
                         break
 
-            # Garante valores padrões seguros se a busca parcial não achar exato
             cut["start_sec"] = start_sec if start_sec is not None else 0.0
             cut["end_sec"] = end_sec if end_sec is not None else (cut["start_sec"] + 60.0)
 
@@ -278,4 +308,4 @@ class ContentMinerLLM:
 
 if __name__ == "__main__":
     miner = ContentMinerLLM()
-    print("ContentMinerLLM pronto e alinhado com o cruzamento de .txt e .json!")
+    print("ContentMinerLLM pronto e testado para suporte aos 2 SDKs do Gemini!")

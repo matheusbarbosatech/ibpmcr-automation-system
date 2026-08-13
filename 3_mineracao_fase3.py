@@ -4,7 +4,7 @@ Script Principal da FASE 3: Hub Inteligente de Mineração de Conteúdo (Gemini 
 Sincroniza os arquivos de transcrição (.txt e .json) do Google Drive (meudrive:IBPM_CR_Cortes/audio_podcasts/transcricoes),
 envia o texto para a API do Google Gemini 1.5 Flash (com Freio ABS de 4.5s / 15 RPM),
 cruza o texto com os segmentos para anotar os timestamps exatos (start_sec e end_sec) dos cortes virais,
-salva os relatórios em .insights.json e os envia de volta para o Google Drive!
+salva os relatórios em .insights.json e os envia de volta para o Google Drive de forma contínua e autônoma!
 
 Uso no Terminal Local:
    python 3_mineracao_fase3.py
@@ -78,7 +78,7 @@ def sync_insights_to_gdrive_rclone():
             logger.warning(f"⚠️ Aviso ao enviar insights para o Drive via Rclone: {e}")
 
 
-def print_banner(watch_mode: bool = False):
+def print_banner(watch_mode: bool = True):
     modo_str = "MONITORAMENTO CONTÍNUO (DAEMON WATCHDOG)" if watch_mode else "LOTE ÚNICO"
     banner = f"""
 ===========================================================================
@@ -191,11 +191,12 @@ def process_pending_batch(state_mgr: MasterPlanManager, miner: ContentMinerLLM, 
 def main():
     parser = argparse.ArgumentParser(description="Fase 3 - Mineração de Conteúdo via Gemini 1.5 Flash API com Sincronização do Google Drive")
     parser.add_argument("--batch-size", type=int, default=50, help="Quantidade de cultos a minerar por lote (padrão: 50)")
-    parser.add_argument("--watch", action="store_true", help="Manter o script monitorando continuamente a pasta de transcrições do Drive")
+    parser.add_argument("--single-run", action="store_true", help="Rodar apenas um lote e encerrar (sem monitoramento contínuo)")
     parser.add_argument("--force", action="store_true", help="Forçar re-mineração mesmo se o relatório já existir")
     args = parser.parse_args()
 
-    print_banner(watch_mode=args.watch or True)
+    watch_mode = not args.single_run
+    print_banner(watch_mode=watch_mode)
 
     state_mgr = MasterPlanManager()
     miner = ContentMinerLLM(gemini_api_key=GEMINI_API_KEY, groq_api_key=GROQ_API_KEY)
@@ -206,8 +207,8 @@ def main():
         try:
             processed = process_pending_batch(state_mgr, miner, max_items=args.batch_size, force=args.force)
 
-            if not args.watch and processed > 0:
-                logger.info(f"✅ Processamento de lote concluído ({processed} cultos minerados). Exibindo resumo.")
+            if not watch_mode and processed > 0:
+                logger.info(f"✅ Processamento de lote único concluído ({processed} cultos minerados).")
                 break
             
             if processed == 0:
