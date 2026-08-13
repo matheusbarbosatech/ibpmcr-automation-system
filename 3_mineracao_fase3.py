@@ -4,10 +4,13 @@ Script Principal da FASE 3: Hub Inteligente de Mineração de Conteúdo (Gemini 
 Sincroniza os arquivos de transcrição (.txt e .json) do Google Drive (meudrive:IBPM_CR_Cortes/audio_podcasts/transcricoes),
 envia o texto para a API do Google Gemini 1.5 Flash (com Freio ABS de 4.5s / 15 RPM),
 cruza o texto com os segmentos para anotar os timestamps exatos (start_sec e end_sec) dos cortes virais,
-salva os relatórios em .insights.json e os envia de volta para o Google Drive de forma contínua e autônoma!
+salva os relatórios em .insights.json e os envia de volta para o Google Drive!
+
+Intervalo de Monitoramento: 3 Minutos (180 segundos) adaptado ao ritmo do Colab (~10 min/vídeo).
 
 Uso no Terminal Local:
    python 3_mineracao_fase3.py
+   python 3_mineracao_fase3.py --force (para recriar relatórios com a IA real)
 """
 
 import sys
@@ -79,7 +82,7 @@ def sync_insights_to_gdrive_rclone():
 
 
 def print_banner(watch_mode: bool = True):
-    modo_str = "MONITORAMENTO CONTÍNUO (DAEMON WATCHDOG)" if watch_mode else "LOTE ÚNICO"
+    modo_str = "MONITORAMENTO CONTÍNUO (INTERVALO DE 3 MINUTOS)" if watch_mode else "LOTE ÚNICO"
     banner = f"""
 ===========================================================================
  [IBPM CR] AUTOMATION SYSTEM - FASE 3: MINERAÇÃO DE CONTEÚDO CONTINUA
@@ -201,7 +204,7 @@ def main():
     state_mgr = MasterPlanManager()
     miner = ContentMinerLLM(gemini_api_key=GEMINI_API_KEY, groq_api_key=GROQ_API_KEY)
 
-    logger.info("👀 Bot da Fase 3 Iniciado! Sincronizando com o Google Drive e monitorando...\n")
+    logger.info("👀 Bot da Fase 3 Iniciado! Sincronizando com o Google Drive e monitorando a cada 3 minutos...\n")
 
     while True:
         try:
@@ -212,15 +215,18 @@ def main():
                 break
             
             if processed == 0:
-                logger.info("😴 Nenhum novo arquivo de transcrição pendente no momento. Aguardando o Colab transcrever mais cultos (Checando em 15s)...")
-                time.sleep(15)
+                logger.info("😴 Nenhum novo arquivo de transcrição pendente no momento. Próxima checagem no Google Drive em 3 minutos (180s)...")
+                time.sleep(180)
+            else:
+                logger.info(f"✅ Lote de {processed} cultos minerados com sucesso! Próxima checagem em 3 minutos (180s)...")
+                time.sleep(180)
 
         except KeyboardInterrupt:
             logger.info("\n🛑 Monitoramento da Fase 3 encerrado pelo usuário.")
             break
         except Exception as e:
-            logger.warning(f"⚠️ Ocorreu um erro inesperado no monitoramento da Fase 3: {e}. Reiniciando ciclo em 10s...")
-            time.sleep(10)
+            logger.warning(f"⚠️ Ocorreu um erro inesperado no monitoramento da Fase 3: {e}. Reiniciando ciclo em 30s...")
+            time.sleep(30)
 
 
 if __name__ == "__main__":
