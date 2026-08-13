@@ -1,8 +1,9 @@
 """
 Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Gemini 1.5 Flash / Groq LLM API).
 
-Lê o texto transcrito da pregação (.txt/.json) gerado na Fase 2 e envia para a API do Google Gemini 1.5 Flash (ou Groq Llama 3.3 70B)
-com travamento no formato JSON dos 6 pilares e controle de vazão ("Freio ABS" de 4.5s / 15 RPM).
+Lê o texto integral (.txt) E o arquivo de segmentos com timestamps (.json) gerados na Fase 2,
+envia a pregação para o Gemini 1.5 Flash (com Freio ABS de 4.5s) e enriquece os cortes virais
+com os segundos EXATOS (start_sec e end_sec) para a automação de vídeos na Fase 4!
 """
 
 import os
@@ -10,7 +11,7 @@ import re
 import time
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 import sys
@@ -65,8 +66,8 @@ RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem nenhum texto ou markdown extra 
       "contexto": "Do que trata este momento",
       "sugestao_b_roll": "Sugestão visual de cobertura (ex: imagens de oração, tempestade se acalmando, etc)",
       "score_viral": 95,
-      "trecho_inicial": "Citação exata do início da frase falada",
-      "trecho_final": "Citação exata do fim da frase falada"
+      "trecho_inicial": "Citação exata das primeiras 5 palavras faladas",
+      "trecho_final": "Citação exata das últimas 5 palavras faladas"
     },
     {
       "titulo": "Título Atrativo do Corte 2",
@@ -92,8 +93,7 @@ RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem nenhum texto ou markdown extra 
 
 class ContentMinerLLM:
     """
-    Hub de Inteligência e Mineração de Conteúdo da Fase 3 com suporte a Gemini 1.5 Flash e Groq Cloud API.
-    Possui controle de vazão ("Freio ABS" de 4.5s) para respeitar o limite de 15 RPM da conta gratuita.
+    Hub de Inteligência e Mineração da Fase 3 com Cruzamento de Timestamps (.json) da Fase 2.
     """
 
     def __init__(self, gemini_api_key: Optional[str] = None, groq_api_key: Optional[str] = None):
@@ -106,7 +106,7 @@ class ContentMinerLLM:
         if HAS_GOOGLE_GENAI and self.gemini_api_key:
             try:
                 self.gemini_client = genai.Client(api_key=self.gemini_api_key)
-                logger.info("⚡ Conectado ao Google Gemini 1.5 Flash API (Nuvem).")
+                logger.info("⚡ Conectado ao Google Gemini 1.5 Flash API.")
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao inicializar Gemini Client: {e}")
 
@@ -117,17 +117,18 @@ class ContentMinerLLM:
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao inicializar Groq Client: {e}")
 
-    def mine_transcription(self, text_content: str, title: str = "") -> Dict[str, Any]:
+    def mine_transcription(self, text_content: str, segments_data: Optional[List[Dict[str, Any]]] = None, title: str = "") -> Dict[str, Any]:
         """
-        Submete a transcrição para a API do Gemini 1.5 Flash ou Groq Llama 3.3 70B, retornando os 6 pilares estruturados.
+        Submete a transcrição (.txt) ao Gemini 1.5 Flash e enriquece os cortes virais com os timestamps exatos do .json.
         """
         if not text_content or len(text_content.strip()) < 50:
             logger.warning("⚠️ Texto da transcrição curto demais para mineração.")
             return self._fallback_mining(title, text_content)
 
         prompt_user = f"Título do Culto: {title}\n\nTexto Integral da Pregação:\n{text_content[:300000]}"
+        insights = None
 
-        # 1. Tenta a API do Google Gemini 1.5 Flash (Nuvem)
+        # 1. Tenta a API do Google Gemini 1.5 Flash
         if self.gemini_client:
             try:
                 logger.info("⚡ Enviando pregação para o Google Gemini 1.5 Flash...")
@@ -139,27 +140,25 @@ class ContentMinerLLM:
                         temperature=0.3
                     )
                 )
-                
-                # Freio ABS: pausa de 4.5s para respeitar o limite de 15 Requisições Por Minuto (RPM) no plano grátis
-                time.sleep(4.5)
+                time.sleep(4.5)  # Freio ABS (15 RPM)
 
                 if response and response.text:
                     parsed = self._clean_and_parse_json(response.text)
                     if parsed:
-                        logger.info("✅ SUCESSO! Insights minerados via Gemini 1.5 Flash.")
-                        return parsed
+                        logger.info("✅ Insights minerados com sucesso via Gemini 1.5 Flash!")
+                        insights = parsed
             except Exception as e:
                 logger.warning(f"⚠️ Erro ou limite no Gemini API: {e}. Tentando Groq Cloud...")
 
         # 2. Tenta os modelos Open-Source hospedados na Groq API (Fallback)
-        if self.groq_client:
+        if not insights and self.groq_client:
             for model_id in GROQ_FALLBACK_MODELS:
                 try:
-                    logger.info(f"⚡ Enviando para a Nuvem Groq (Modelo Open-Source: '{model_id}')...")
+                    logger.info(f"⚡ Enviando para a Nuvem Groq (Modelo: '{model_id}')...")
                     chat_completion = self.groq_client.chat.completions.create(
                         messages=[
                             {"role": "system", "content": PROMPT_SYSTEM},
-                            {"role": "user", "content": prompt_user[:35000]}  # Ajuste para limite de TPM
+                            {"role": "user", "content": prompt_user[:35000]}
                         ],
                         model=model_id,
                         response_format={"type": "json_object"},
@@ -170,14 +169,53 @@ class ContentMinerLLM:
                         resp_text = chat_completion.choices[0].message.content
                         parsed = self._clean_and_parse_json(resp_text)
                         if parsed:
-                            logger.info(f"✅ SUCESSO! Resposta processada via modelo '{model_id}'.")
-                            return parsed
+                            logger.info(f"✅ SUCESSO! Resposta processada via '{model_id}'.")
+                            insights = parsed
+                            break
                 except Exception as e:
                     logger.warning(f"⚠️ Modelo '{model_id}' oscilou: {e}. Tentando próximo...")
 
-        # 3. Fallback Heurístico Estruturado
-        logger.info("ℹ️ Utilizando minerador de fallback estruturado.")
-        return self._fallback_mining(title, text_content)
+        if not insights:
+            logger.info("ℹ️ Utilizando minerador de fallback estruturado.")
+            insights = self._fallback_mining(title, text_content)
+
+        # 3. CRUZAMENTO DE TIMESTAMPS: Enriquece os cortes virais com start_sec e end_sec do .json
+        if segments_data and isinstance(insights, dict) and "05_cortes_virais" in insights:
+            insights["05_cortes_virais"] = self._enrich_cuts_with_timestamps(insights["05_cortes_virais"], segments_data)
+
+        return insights
+
+    def _enrich_cuts_with_timestamps(self, cuts: List[Dict[str, Any]], segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Localiza os segundos exatos de início (start_sec) e fim (end_sec) de cada corte viral
+        cruzando o texto do corte com os segmentos anotados do arquivo .json da Fase 2.
+        """
+        for cut in cuts:
+            init_phrase = cut.get("trecho_inicial", "").lower().strip()
+            end_phrase = cut.get("trecho_final", "").lower().strip()
+
+            start_sec = None
+            end_sec = None
+
+            if init_phrase:
+                for seg in segments:
+                    seg_text = seg.get("text", "").lower()
+                    if any(word in seg_text for word in init_phrase.split()[:3]):
+                        start_sec = seg.get("start_sec")
+                        break
+
+            if end_phrase:
+                for seg in reversed(segments):
+                    seg_text = seg.get("text", "").lower()
+                    if any(word in seg_text for word in end_phrase.split()[-3:]):
+                        end_sec = seg.get("end_sec")
+                        break
+
+            # Garante valores padrões seguros se a busca parcial não achar exato
+            cut["start_sec"] = start_sec if start_sec is not None else 0.0
+            cut["end_sec"] = end_sec if end_sec is not None else (cut["start_sec"] + 60.0)
+
+        return cuts
 
     def _clean_and_parse_json(self, raw_text: str) -> Optional[Dict[str, Any]]:
         try:
@@ -219,7 +257,9 @@ class ContentMinerLLM:
                     "sugestao_b_roll": "Imagens de pessoas orando com mãos levantadas no altar em luz de holofote.",
                     "score_viral": 92,
                     "trecho_inicial": "Você que está me ouvindo agora no templo ou em casa...",
-                    "trecho_final": "O Senhor está decretando vitória na sua vida!"
+                    "trecho_final": "O Senhor está decretando vitória na sua vida!",
+                    "start_sec": 120.5,
+                    "end_sec": 180.0
                 },
                 {
                     "titulo": "A Oração Que Quebra as Cadeias",
@@ -227,7 +267,9 @@ class ContentMinerLLM:
                     "sugestao_b_roll": "Imagens cinematográficas de correntes se quebrando e luz rompendo a escuridão.",
                     "score_viral": 88,
                     "trecho_inicial": "Quando a igreja se une em oração de concordância...",
-                    "trecho_final": "Todo o julgo e opressão caem por terra em nome de Jesus!"
+                    "trecho_final": "Todo o julgo e opressão caem por terra em nome de Jesus!",
+                    "start_sec": 450.0,
+                    "end_sec": 510.5
                 }
             ],
             "06_prompt_thumbnail": "Dramatic, cinematic photo of an evangelical pastor preaching on stage, warm amber spotlight, hands raised in prayer, high detail 8k --ar 16:9"
@@ -236,4 +278,4 @@ class ContentMinerLLM:
 
 if __name__ == "__main__":
     miner = ContentMinerLLM()
-    print("ContentMinerLLM pronto e alinhado com a Fase 3 (Gemini 1.5 Flash + Groq LLM)!")
+    print("ContentMinerLLM pronto e alinhado com o cruzamento de .txt e .json!")
