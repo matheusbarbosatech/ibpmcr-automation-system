@@ -111,24 +111,24 @@ class ContentMinerLLM:
         self.gemini_legacy_configured = False
         self.groq_client = None
 
-        if HAS_NEW_GENAI and self.gemini_api_key:
+        if HAS_NEW_GENAI and self.gemini_api_key and len(self.gemini_api_key.strip()) > 10:
             try:
-                self.gemini_new_client = genai.Client(api_key=self.gemini_api_key)
+                self.gemini_new_client = genai.Client(api_key=self.gemini_api_key.strip())
                 logger.info("⚡ Conectado ao Google Gemini (SDK GenAI Novo).")
             except Exception as e:
                 logger.warning(f"⚠️ Aviso ao inicializar GenAI Novo: {e}")
 
-        if HAS_LEGACY_GENAI and self.gemini_api_key:
+        if HAS_LEGACY_GENAI and self.gemini_api_key and len(self.gemini_api_key.strip()) > 10:
             try:
-                google_genai_legacy.configure(api_key=self.gemini_api_key)
+                google_genai_legacy.configure(api_key=self.gemini_api_key.strip())
                 self.gemini_legacy_configured = True
                 logger.info("⚡ Conectado ao Google Gemini (SDK GenerativeAI).")
             except Exception as e:
                 logger.warning(f"⚠️ Aviso ao inicializar GenerativeAI Legacy: {e}")
 
-        if HAS_GROQ and self.groq_api_key:
+        if HAS_GROQ and self.groq_api_key and len(self.groq_api_key.strip()) > 10:
             try:
-                self.groq_client = Groq(api_key=self.groq_api_key)
+                self.groq_client = Groq(api_key=self.groq_api_key.strip())
                 logger.info("⚡ Conectado à infraestrutura Groq Cloud API.")
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao inicializar Groq Client: {e}")
@@ -218,7 +218,7 @@ class ContentMinerLLM:
                     logger.warning(f"⚠️ Modelo '{model_id}' oscilou: {e}. Tentando próximo...")
 
         if not insights:
-            logger.warning("⚠️ Chave do Gemini ausente ou inválida. Para minerar com a IA real, insira uma chave válida no arquivo .env!")
+            logger.warning("⚠️ Não foi possível se conectar à API do Gemini. Verifique a chave no arquivo .env!")
             insights = self._fallback_mining(title, text_content)
 
         # 4. CRUZAMENTO DE TIMESTAMPS: Enriquece os cortes virais com start_sec e end_sec do .json
@@ -315,4 +315,4 @@ class ContentMinerLLM:
 
 if __name__ == "__main__":
     miner = ContentMinerLLM()
-    print("ContentMinerLLM pronto e alinhado com gemini-flash-latest!")
+    print("ContentMinerLLM pronto sem restrições de prefixo!")
