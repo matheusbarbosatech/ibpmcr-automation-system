@@ -18,8 +18,8 @@ os.system("pip install -q google-generativeai tqdm")
 from tqdm import tqdm
 import google.generativeai as genai
 
-# 🔑 CHAVE DA API DO GOOGLE GEMINI (Insira sua chave do AI Studio aqui)
-GEMINI_API_KEY = "SUA_CHAVE_GEMINI_AQUI"
+# 🔑 CHAVE DA API DO GOOGLE GEMINI (Cole sua chave do AI Studio entre as aspas abaixo)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "SUA_CHAVE_GEMINI_AQUI")
 if GEMINI_API_KEY and GEMINI_API_KEY != "SUA_CHAVE_GEMINI_AQUI":
     genai.configure(api_key=GEMINI_API_KEY)
 
