@@ -1,8 +1,9 @@
 """
-Script Principal da FASE 3: Hub Inteligente de Mineração de Conteúdo (Gemini API).
+Script Principal da FASE 3: Hub Inteligente de Mineração de Conteúdo (Groq Open-Source Cloud API).
 
 Lê os arquivos de transcrição (.txt e .json) da pasta data/audio_podcasts/ (ou Google Drive),
-envia o conteúdo para o Google Gemini API e gera os relatórios de insights em JSON e no SQLite.
+envia o conteúdo para os modelos Open-Source na nuvem do Groq (Llama 3.3 70B, Qwen 2.5 72B, DeepSeek R1)
+e gera os relatórios de insights em JSON e no SQLite.
 
 Requisitos Atendidos:
 1. Suporte a caminhos locais ou sincronizados do Google Drive (G:\Meu Drive\IBPM_CR_Cortes).
@@ -26,7 +27,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 
 sys.path.append(str(Path(__file__).resolve().parent))
 
-from config.settings import AUDIO_DIR, INSIGHTS_DIR, DB_PATH, GEMINI_API_KEY
+from config.settings import AUDIO_DIR, INSIGHTS_DIR, DB_PATH, GROQ_API_KEY
 from src.core.state_manager import MasterPlanManager
 from src.discovery.content_miner_llm import ContentMinerLLM
 
@@ -37,7 +38,8 @@ logger = logging.getLogger("Fase3_MineracaoConteudo")
 def print_banner():
     banner = f"""
 ===========================================================================
- [IBPM CR] AUTOMATION SYSTEM - FASE 3: HUB INTELIGENTE DE MINERAÇÃO (GEMINI LLM)
+ [IBPM CR] AUTOMATION SYSTEM - FASE 3: MINERAÇÃO INTELIGENTE (GROQ OPEN-SOURCE)
+   Modelos na Nuvem:   Llama 3.3 70B | Qwen 2.5 72B | DeepSeek R1 70B
    Origem Transcrições: {AUDIO_DIR}
    Destino Insights:    {INSIGHTS_DIR}
    Banco de Dados:      {DB_PATH}
@@ -48,7 +50,7 @@ def print_banner():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fase 3 - Mineração de Conteúdo via Gemini API")
+    parser = argparse.ArgumentParser(description="Fase 3 - Mineração de Conteúdo via Groq Open-Source API")
     parser.add_argument("--batch-size", type=int, default=10, help="Quantidade de cultos a minerar por lote (padrão: 10)")
     parser.add_argument("--force", action="store_true", help="Forçar re-mineração mesmo se o relatório já existir")
     args = parser.parse_args()
@@ -56,7 +58,7 @@ def main():
     print_banner()
 
     state_mgr = MasterPlanManager()
-    miner = ContentMinerLLM(api_key=GEMINI_API_KEY)
+    miner = ContentMinerLLM(groq_api_key=GROQ_API_KEY)
 
     all_videos = state_mgr.get_all_videos_chronological()
     
@@ -66,7 +68,6 @@ def main():
     for v in all_videos:
         v_id = v["video_id"]
         idx = v.get("indice_sequencial", 1)
-        title = v.get("titulo_original", "")
 
         # Localiza o arquivo .txt da transcrição
         txt_file = None
@@ -78,19 +79,16 @@ def main():
                         txt_file = full_txt_p
                         break
 
-        # Se não houver .txt no disco, verifica no SQLite se há texto transcrito gravado
         if not txt_file and v.get("texto_transcrito") and len(v.get("texto_transcrito").strip()) > 50:
             txt_file = f"sqlite_video_{v_id}"
 
         if not txt_file:
             continue
 
-        # Nome do arquivo de insight de saída em INSIGHTS_DIR
         date_str = str(v.get("data_publicacao", ""))[:10]
         sanitized = v.get("titulo_sanitizado", "culto")
         out_json_path = INSIGHTS_DIR / f"{idx:03d}_{date_str}_{v_id}_{sanitized}.insights.json"
 
-        # Idempotência: verifica se o insight já existe no disco e na tabela acervo_insights
         already_done = (
             not args.force and
             out_json_path.exists() and
@@ -112,7 +110,7 @@ def main():
         return
 
     items_to_process = pending_list[:args.batch_size]
-    pbar = tqdm(items_to_process, desc="Minerando Insights via LLM", unit="culto")
+    pbar = tqdm(items_to_process, desc="Minerando Insights via Groq LLM", unit="culto")
 
     processed_count = 0
 
@@ -126,7 +124,6 @@ def main():
         display_name = f"[{idx:03d}] {v_id} - {title[:25]}"
         pbar.set_postfix_str(display_name)
 
-        # Lê o texto da transcrição
         if txt_path.startswith("sqlite_video_"):
             text_content = item.get("texto_transcrito", "")
         else:
@@ -137,15 +134,13 @@ def main():
                 logger.warning(f"⚠️ Erro ao ler arquivo .txt {txt_path}: {e}")
                 continue
 
-        logger.info(f"\n🧠 Processando vídeo [{idx:03d}] (ID: {v_id}) via Gemini LLM...")
+        logger.info(f"\n🧠 Processando vídeo [{idx:03d}] (ID: {v_id}) via Groq Open-Source LLM...")
 
-        # Submete ao minerador Gemini LLM
         insights_dict = miner.mine_transcription(text_content=text_content, title=title)
 
         if insights_dict:
             raw_json_str = json.dumps(insights_dict, ensure_ascii=False, indent=2)
 
-            # 1. Salva arquivo .json individual na pasta INSIGHTS_DIR
             try:
                 with open(out_json_path, "w", encoding="utf-8") as f:
                     f.write(raw_json_str)
@@ -153,7 +148,6 @@ def main():
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao salvar arquivo JSON no disco: {e}")
 
-            # 2. Insere e atualiza os dados na tabela acervo_insights do SQLite
             state_mgr.save_insights_fase3(
                 video_id=v_id,
                 idx=idx,

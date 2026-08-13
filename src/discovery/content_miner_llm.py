@@ -1,5 +1,5 @@
 """
-Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Groq Open-Source Cloud API & Gemini).
+Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Groq Open-Source Cloud API).
 
 Envia o texto transcrito da pregação (.txt/.json) para a infraestrutura de supercomputadores na nuvem do Groq
 (Llama 3.3 70B, Qwen 2.5 72B, DeepSeek R1 70B, Mixtral) com uso ZERO de RAM/CPU da sua máquina local.
@@ -15,23 +15,13 @@ from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
-from config.settings import (
-    GROQ_API_KEY, GROQ_MODEL_NAME, GROQ_FALLBACK_MODELS,
-    GEMINI_API_KEY, GEMINI_MODEL_NAME
-)
+from config.settings import GROQ_API_KEY, GROQ_MODEL_NAME, GROQ_FALLBACK_MODELS
 
 try:
     from groq import Groq
     HAS_GROQ = True
 except ImportError:
     HAS_GROQ = False
-
-try:
-    from google import genai
-    from google.genai import types
-    HAS_GOOGLE_GENAI = True
-except ImportError:
-    HAS_GOOGLE_GENAI = False
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("ContentMinerLLM")
@@ -94,15 +84,12 @@ RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem nenhum texto ou markdown extra 
 
 class ContentMinerLLM:
     """
-    Minerador de insights resiliente com suporte aos modelos Open-Source na Nuvem via Groq Cloud API.
+    Minerador de insights resiliente focado 100% nos modelos Open-Source hospedados na Nuvem da Groq API.
     """
 
-    def __init__(self, groq_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None):
+    def __init__(self, groq_api_key: Optional[str] = None):
         self.groq_api_key = groq_api_key or GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
-        self.gemini_api_key = gemini_api_key or GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
-        
         self.groq_client = None
-        self.gemini_client = None
 
         if HAS_GROQ and self.groq_api_key:
             try:
@@ -110,13 +97,8 @@ class ContentMinerLLM:
                 logger.info("⚡ Conectado à infraestrutura Groq Cloud API (Processamento 100% na Nuvem).")
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao inicializar Groq Client: {e}")
-
-        if HAS_GOOGLE_GENAI and self.gemini_api_key:
-            try:
-                self.gemini_client = genai.Client(api_key=self.gemini_api_key)
-                logger.info(f"✅ Conectado ao Google GenAI SDK ({GEMINI_MODEL_NAME}).")
-            except Exception as e:
-                logger.warning(f"⚠️ Erro ao inicializar Google GenAI Client: {e}")
+        else:
+            logger.warning("⚠️ GROQ_API_KEY não foi configurada. Defina no arquivo .env.")
 
     def mine_transcription(self, text_content: str, title: str = "") -> Dict[str, Any]:
         """
@@ -151,27 +133,7 @@ class ContentMinerLLM:
                 except Exception as e:
                     logger.warning(f"⚠️ Modelo '{model_id}' oscilou ou excedeu limite: {e}. Tentando próximo modelo Open-Source...")
 
-        # 2. Tenta o Google Gemini como fallback de nuvem
-        if self.gemini_client:
-            try:
-                logger.info(f"✅ Tentando fallback Gemini API ({GEMINI_MODEL_NAME})...")
-                response = self.gemini_client.models.generate_content(
-                    model=GEMINI_MODEL_NAME,
-                    contents=[PROMPT_SYSTEM, prompt_user],
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        temperature=0.3
-                    )
-                )
-                if response and response.text:
-                    parsed = self._clean_and_parse_json(response.text)
-                    if parsed:
-                        logger.info("✅ Resposta recebida do Gemini com sucesso!")
-                        return parsed
-            except Exception as e:
-                logger.warning(f"⚠️ Erro na chamada ao Gemini API: {e}")
-
-        # 3. Fallback Heurístico Estruturado
+        # 2. Fallback Heurístico Estruturado
         logger.info("ℹ️ Utilizando minerador de fallback estruturado.")
         return self._fallback_mining(title, text_content)
 
@@ -232,4 +194,4 @@ class ContentMinerLLM:
 
 if __name__ == "__main__":
     miner = ContentMinerLLM()
-    print("ContentMinerLLM pronto e otimizado 100% para processamento em Nuvem via Groq Cloud API!")
+    print("ContentMinerLLM pronto e otimizado 100% para Groq Cloud API!")

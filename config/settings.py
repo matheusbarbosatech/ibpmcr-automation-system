@@ -52,10 +52,6 @@ GROQ_FALLBACK_MODELS = [
     "mixtral-8x7b-32768"
 ]
 
-# Parâmetros da API Gemini LLM (Opcional - Nuvem)
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
-
 # Parâmetros de Áudio (MP3 Leve mono a 64kbps 16kHz)
 AUDIO_BITRATE = "64k"
 AUDIO_CHANNELS = 1  # Mono
