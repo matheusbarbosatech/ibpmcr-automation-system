@@ -2,7 +2,7 @@
 Configurações Globais do IBPM CR Automation System (Fase 1, 2 e 3).
 
 Define caminhos de diretórios locais/nuvem, chaves de API e constantes para
-ingestão de áudio, transcrição por IA e mineração inteligente de conteúdo (Groq / Gemini LLM).
+ingestão de áudio, transcrição por IA e mineração inteligente de conteúdo (Groq Open-Source / Gemini LLM).
 """
 
 import os
@@ -42,9 +42,19 @@ YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "UCHhLxWRcCB-xKo0ifOQ8MVQ")
 YOUTUBE_CHANNEL_HANDLE = os.getenv("YOUTUBE_CHANNEL_HANDLE", "@ibpmcr7976")
 YOUTUBE_UPLOADS_PLAYLIST = "UUHhLxWRcCB-xKo0ifOQ8MVQ"
 
-# Parâmetros da API Groq (Llama 3.3 70B Open-Source)
+# Parâmetros da API Groq (Modelos Open-Source: Llama 3.3 70B, Qwen 2.5 72B, DeepSeek R1)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+GROQ_FALLBACK_MODELS = [
+    "llama-3.3-70b-versatile",
+    "qwen-2.5-72b-instruct",
+    "deepseek-r1-distill-llama-70b",
+    "mixtral-8x7b-32768"
+]
+
+# Configurações do Ollama Local (100% Offline e Open-Source)
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "qwen2.5")
 
 # Parâmetros da API Gemini LLM (Opcional)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

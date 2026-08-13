@@ -1,22 +1,30 @@
 """
-Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Groq Llama 3.3 70B & Gemini LLM).
+Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Open-Source Multi-Model LLM).
 
-Envia o texto transcrito da pregação (.txt/.json) para a API do Groq (Llama 3.3 70B Open-Source)
-ou Google Gemini, atuando como "Curador de Conteúdo e Teólogo Sênior", extraindo os 6 pilares
-estruturados em formato JSON estrito.
+Suporta os principais modelos Open-Source do mercado via Groq API e Ollama Local:
+1. Llama 3.3 70B Versatile (Meta Open-Source) - Principal
+2. Qwen 2.5 72B Instruct (Alibaba Open-Source) - Fallback 1
+3. DeepSeek R1 70B (DeepSeek Open-Source) - Fallback 2
+4. Mixtral 8x7B (Mistral AI Open-Source) - Fallback 3
+5. Ollama Local (100% Offline no PC) - Fallback 4
 """
 
 import os
 import re
 import json
 import logging
+import urllib.request
 from typing import Dict, Any, Optional
 from pathlib import Path
 
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
-from config.settings import GROQ_API_KEY, GROQ_MODEL_NAME, GEMINI_API_KEY, GEMINI_MODEL_NAME
+from config.settings import (
+    GROQ_API_KEY, GROQ_MODEL_NAME, GROQ_FALLBACK_MODELS,
+    OLLAMA_HOST, OLLAMA_MODEL_NAME,
+    GEMINI_API_KEY, GEMINI_MODEL_NAME
+)
 
 try:
     from groq import Groq
@@ -39,7 +47,7 @@ PROMPT_SYSTEM = """Você é um Curador de Conteúdo e Teólogo Sênior especiali
 
 Sua tarefa é analisar criticamente o texto integral da pregação do culto da Igreja Batista Pentecostal Mundial (IBPM CR) e extrair insights valiosos com extrema fidelidade teológica e alto potencial de engajamento.
 
-RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem nenhum markdown fora do JSON) contendo as seguintes 6 chaves exatas:
+RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem nenhum texto ou markdown extra fora do JSON) contendo as seguintes 6 chaves exatas:
 
 {
   "01_tema_central": "Resumo executivo da mensagem principal do culto em 2 a 3 parágrafos curtos.",
@@ -92,7 +100,7 @@ RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem nenhum markdown fora do JSON) c
 
 class ContentMinerLLM:
     """
-    Minerador de insights com suporte prioritário à API Groq (Llama 3.3 70B) e Gemini LLM.
+    Minerador de insights resiliente com suporte a múltiplos modelos Open-Source.
     """
 
     def __init__(self, groq_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None):
@@ -105,23 +113,20 @@ class ContentMinerLLM:
         if HAS_GROQ and self.groq_api_key:
             try:
                 self.groq_client = Groq(api_key=self.groq_api_key)
-                logger.info(f"⚡ Conectado ao Groq API ({GROQ_MODEL_NAME} - Llama 3.3 70B).")
+                logger.info("⚡ Conectado à infraestrutura Groq API (Múltiplos modelos Open-Source).")
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao inicializar Groq Client: {e}")
 
-        if HAS_GOOGLE_GENAI and self.gemini_api_key and not self.groq_client:
+        if HAS_GOOGLE_GENAI and self.gemini_api_key:
             try:
                 self.gemini_client = genai.Client(api_key=self.gemini_api_key)
                 logger.info(f"✅ Conectado ao Google GenAI SDK ({GEMINI_MODEL_NAME}).")
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao inicializar Google GenAI Client: {e}")
 
-        if not self.groq_client and not self.gemini_client:
-            logger.warning("⚠️ Nenhuma chave de API configurada (GROQ_API_KEY ou GEMINI_API_KEY). Defina no arquivo .env.")
-
     def mine_transcription(self, text_content: str, title: str = "") -> Dict[str, Any]:
         """
-        Submete o texto da transcrição ao LLM (Groq ou Gemini) e retorna o JSON estruturado.
+        Submete a transcrição cascateando pelos modelos Open-Source até obter resposta parsed com sucesso.
         """
         if not text_content or len(text_content.strip()) < 50:
             logger.warning("⚠️ Texto da transcrição curto demais para mineração.")
@@ -129,32 +134,38 @@ class ContentMinerLLM:
 
         prompt_user = f"Título do Culto: {title}\n\nTexto Integral da Pregação:\n{text_content[:25000]}"
 
-        # 1. Tenta a API do Groq (Llama 3.3 70B Versatile - Ultra Rápida & Gratuita)
+        # 1. Tenta a fila de modelos Open-Source na Groq API (Llama 3.3 70B -> Qwen 2.5 72B -> DeepSeek R1 70B -> Mixtral)
         if self.groq_client:
-            try:
-                logger.info(f"⚡ Enviando para a API Groq ({GROQ_MODEL_NAME})...")
-                chat_completion = self.groq_client.chat.completions.create(
-                    messages=[
-                        {"role": "system", "content": PROMPT_SYSTEM},
-                        {"role": "user", "content": prompt_user}
-                    ],
-                    model=GROQ_MODEL_NAME,
-                    response_format={"type": "json_object"},
-                    temperature=0.3
-                )
-                if chat_completion and chat_completion.choices:
-                    resp_text = chat_completion.choices[0].message.content
-                    parsed = self._clean_and_parse_json(resp_text)
-                    if parsed:
-                        logger.info("✅ Resposta recebida do Groq (Llama 3.3 70B) com sucesso!")
-                        return parsed
-            except Exception as e:
-                logger.warning(f"⚠️ Erro na chamada à API Groq: {e}")
+            for model_id in GROQ_FALLBACK_MODELS:
+                try:
+                    logger.info(f"⚡ Tentando mineração com Modelo Open-Source: '{model_id}' via Groq...")
+                    chat_completion = self.groq_client.chat.completions.create(
+                        messages=[
+                            {"role": "system", "content": PROMPT_SYSTEM},
+                            {"role": "user", "content": prompt_user}
+                        ],
+                        model=model_id,
+                        response_format={"type": "json_object"},
+                        temperature=0.3
+                    )
+                    if chat_completion and chat_completion.choices:
+                        resp_text = chat_completion.choices[0].message.content
+                        parsed = self._clean_and_parse_json(resp_text)
+                        if parsed:
+                            logger.info(f"✅ SUCESSO! Resposta processada via modelo Open-Source '{model_id}'.")
+                            return parsed
+                except Exception as e:
+                    logger.warning(f"⚠️ Modelo '{model_id}' oscilou ou excedeu limite: {e}. Tentando próximo modelo Open-Source...")
 
-        # 2. Tenta a API do Google Gemini como fallback de IA
+        # 2. Tenta a API do Ollama Local (100% Offline no computador do usuário)
+        ollama_res = self._try_ollama_local(prompt_user)
+        if ollama_res:
+            return ollama_res
+
+        # 3. Tenta o Google Gemini como fallback opcional de nuvem
         if self.gemini_client:
             try:
-                logger.info(f"✅ Enviando para a API Gemini ({GEMINI_MODEL_NAME})...")
+                logger.info(f"✅ Tentando fallback Gemini API ({GEMINI_MODEL_NAME})...")
                 response = self.gemini_client.models.generate_content(
                     model=GEMINI_MODEL_NAME,
                     contents=[PROMPT_SYSTEM, prompt_user],
@@ -169,11 +180,38 @@ class ContentMinerLLM:
                         logger.info("✅ Resposta recebida do Gemini com sucesso!")
                         return parsed
             except Exception as e:
-                logger.warning(f"⚠️ Erro na chamada à API Gemini: {e}")
+                logger.warning(f"⚠️ Erro na chamada ao Gemini API: {e}")
 
-        # 3. Fallback Heurístico Estruturado
-        logger.info("ℹ️ Utilizando minerador de fallback estruturado.")
+        # 4. Fallback Heurístico Estruturado
+        logger.info("ℹ️ Utilizando minerador de fallback estruturado local.")
         return self._fallback_mining(title, text_content)
+
+    def _try_ollama_local(self, prompt_user: str) -> Optional[Dict[str, Any]]:
+        """Tenta enviar a requisição para o servidor do Ollama local em http://localhost:11434."""
+        url = f"{OLLAMA_HOST}/api/generate"
+        payload = {
+            "model": OLLAMA_MODEL_NAME,
+            "prompt": f"{PROMPT_SYSTEM}\n\n{prompt_user}",
+            "stream": False,
+            "format": "json"
+        }
+        try:
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    raw_text = data.get("response", "")
+                    parsed = self._clean_and_parse_json(raw_text)
+                    if parsed:
+                        logger.info(f"🦙 SUCESSO! Resposta processada via Ollama Local ({OLLAMA_MODEL_NAME}).")
+                        return parsed
+        except Exception:
+            pass
+        return None
 
     def _clean_and_parse_json(self, raw_text: str) -> Optional[Dict[str, Any]]:
         try:
@@ -232,4 +270,4 @@ class ContentMinerLLM:
 
 if __name__ == "__main__":
     miner = ContentMinerLLM()
-    print("ContentMinerLLM pronto para Groq API (Llama 3.3 70B)!")
+    print("ContentMinerLLM pronto com suporte a múltiplos modelos Open-Source (Llama 3.3 70B, Qwen 2.5 72B, DeepSeek R1, Mixtral e Ollama)!")
