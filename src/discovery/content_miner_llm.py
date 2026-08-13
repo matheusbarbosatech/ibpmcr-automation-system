@@ -1,8 +1,8 @@
 """
-Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Gemini 1.5 Flash / Groq LLM API).
+Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Gemini LLM API).
 
 Lê o texto integral (.txt) E o arquivo de segmentos com timestamps (.json) gerados na Fase 2,
-envia a pregação para o Gemini 1.5 Flash (com Freio ABS de 4.5s) e enriquece os cortes virais
+envia a pregação para o Gemini (com Freio ABS de 4.5s) e enriquece os cortes virais
 com os segundos EXATOS (start_sec e end_sec) para a automação de vídeos na Fase 4!
 """
 
@@ -108,24 +108,21 @@ class ContentMinerLLM:
         self.groq_api_key = groq_api_key or GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
         
         self.gemini_new_client = None
-        self.gemini_legacy_model = None
+        self.gemini_legacy_configured = False
         self.groq_client = None
 
         if HAS_NEW_GENAI and self.gemini_api_key:
             try:
                 self.gemini_new_client = genai.Client(api_key=self.gemini_api_key)
-                logger.info("⚡ Conectado ao Google Gemini 1.5 Flash (SDK GenAI Novo).")
+                logger.info("⚡ Conectado ao Google Gemini (SDK GenAI Novo).")
             except Exception as e:
                 logger.warning(f"⚠️ Aviso ao inicializar GenAI Novo: {e}")
 
-        if not self.gemini_new_client and HAS_LEGACY_GENAI and self.gemini_api_key:
+        if HAS_LEGACY_GENAI and self.gemini_api_key:
             try:
                 google_genai_legacy.configure(api_key=self.gemini_api_key)
-                self.gemini_legacy_model = google_genai_legacy.GenerativeModel(
-                    'gemini-1.5-flash',
-                    generation_config={"response_mime_type": "application/json", "temperature": 0.3}
-                )
-                logger.info("⚡ Conectado ao Google Gemini 1.5 Flash (SDK GenerativeAI).")
+                self.gemini_legacy_configured = True
+                logger.info("⚡ Conectado ao Google Gemini (SDK GenerativeAI).")
             except Exception as e:
                 logger.warning(f"⚠️ Aviso ao inicializar GenerativeAI Legacy: {e}")
 
@@ -138,7 +135,7 @@ class ContentMinerLLM:
 
     def mine_transcription(self, text_content: str, segments_data: Optional[List[Dict[str, Any]]] = None, title: str = "") -> Dict[str, Any]:
         """
-        Submete a transcrição (.txt) ao Gemini 1.5 Flash e enriquece os cortes virais com os timestamps exatos do .json.
+        Submete a transcrição (.txt) ao Gemini e enriquece os cortes virais com os timestamps exatos do .json.
         """
         if not text_content or len(text_content.strip()) < 50:
             logger.warning("⚠️ Texto da transcrição curto demais para mineração.")
@@ -147,43 +144,53 @@ class ContentMinerLLM:
         prompt_user = f"Título do Culto: {title}\n\nTexto Integral da Pregação:\n{text_content[:300000]}"
         insights = None
 
+        gemini_models_to_try = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
+
         # 1. Tenta Gemini via SDK Novo
         if self.gemini_new_client:
-            try:
-                logger.info("⚡ Enviando pregação para o Google Gemini 1.5 Flash...")
-                response = self.gemini_new_client.models.generate_content(
-                    model="gemini-1.5-flash",
-                    contents=[PROMPT_SYSTEM, prompt_user],
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        temperature=0.3
+            for gmodel in gemini_models_to_try:
+                try:
+                    logger.info(f"⚡ Enviando pregação para o Google Gemini ({gmodel})...")
+                    response = self.gemini_new_client.models.generate_content(
+                        model=gmodel,
+                        contents=[PROMPT_SYSTEM, prompt_user],
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            temperature=0.3
+                        )
                     )
-                )
-                time.sleep(4.5)  # Freio ABS (15 RPM)
+                    time.sleep(4.5)  # Freio ABS (15 RPM)
 
-                if response and response.text:
-                    parsed = self._clean_and_parse_json(response.text)
-                    if parsed:
-                        logger.info("✅ SUCESSO! Insights minerados via Gemini 1.5 Flash (Novo SDK).")
-                        insights = parsed
-            except Exception as e:
-                logger.warning(f"⚠️ Erro no Gemini API (Novo SDK): {e}. Tentando SDK Padrão...")
+                    if response and response.text:
+                        parsed = self._clean_and_parse_json(response.text)
+                        if parsed:
+                            logger.info(f"✅ SUCESSO! Insights minerados via {gmodel} (Novo SDK).")
+                            insights = parsed
+                            break
+                except Exception as e:
+                    logger.warning(f"⚠️ Erro no Gemini API ({gmodel}): {e}.")
 
         # 2. Tenta Gemini via SDK Padrão (google-generativeai)
-        if not insights and self.gemini_legacy_model:
-            try:
-                logger.info("⚡ Enviando pregação para o Google Gemini 1.5 Flash...")
-                prompt_full = f"{PROMPT_SYSTEM}\n\nTítulo do Culto: {title}\n\nPregação Integral:\n{text_content[:300000]}"
-                response = self.gemini_legacy_model.generate_content(prompt_full)
-                time.sleep(4.5)  # Freio ABS (15 RPM)
+        if not insights and self.gemini_legacy_configured:
+            for gmodel in gemini_models_to_try:
+                try:
+                    logger.info(f"⚡ Enviando pregação para o Google Gemini ({gmodel})...")
+                    legacy_model = google_genai_legacy.GenerativeModel(
+                        gmodel,
+                        generation_config={"response_mime_type": "application/json", "temperature": 0.3}
+                    )
+                    prompt_full = f"{PROMPT_SYSTEM}\n\nTítulo do Culto: {title}\n\nPregação Integral:\n{text_content[:300000]}"
+                    response = legacy_model.generate_content(prompt_full)
+                    time.sleep(4.5)  # Freio ABS (15 RPM)
 
-                if response and response.text:
-                    parsed = self._clean_and_parse_json(response.text)
-                    if parsed:
-                        logger.info("✅ SUCESSO! Insights minerados via Gemini 1.5 Flash (SDK GenerativeAI).")
-                        insights = parsed
-            except Exception as e:
-                logger.warning(f"⚠️ Erro no Gemini API (SDK GenerativeAI): {e}. Tentando Groq Cloud...")
+                    if response and response.text:
+                        parsed = self._clean_and_parse_json(response.text)
+                        if parsed:
+                            logger.info(f"✅ SUCESSO! Insights minerados via {gmodel} (SDK GenerativeAI).")
+                            insights = parsed
+                            break
+                except Exception as e:
+                    logger.warning(f"⚠️ Erro no Gemini API ({gmodel}): {e}.")
 
         # 3. Tenta Groq API (Fallback Open-Source)
         if not insights and self.groq_client:
@@ -211,7 +218,7 @@ class ContentMinerLLM:
                     logger.warning(f"⚠️ Modelo '{model_id}' oscilou: {e}. Tentando próximo...")
 
         if not insights:
-            logger.info("ℹ️ Utilizando minerador de fallback estruturado.")
+            logger.warning("⚠️ Chave do Gemini ausente ou inválida. Para minerar com a IA real, insira uma chave válida no arquivo .env!")
             insights = self._fallback_mining(title, text_content)
 
         # 4. CRUZAMENTO DE TIMESTAMPS: Enriquece os cortes virais com start_sec e end_sec do .json
@@ -308,4 +315,4 @@ class ContentMinerLLM:
 
 if __name__ == "__main__":
     miner = ContentMinerLLM()
-    print("ContentMinerLLM pronto e testado para suporte aos 2 SDKs do Gemini!")
+    print("ContentMinerLLM pronto e alinhado com gemini-flash-latest!")
