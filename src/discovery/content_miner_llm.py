@@ -1,19 +1,14 @@
 """
-Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Open-Source Multi-Model LLM).
+Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Groq Open-Source Cloud API & Gemini).
 
-Suporta os principais modelos Open-Source do mercado via Groq API e Ollama Local:
-1. Llama 3.3 70B Versatile (Meta Open-Source) - Principal
-2. Qwen 2.5 72B Instruct (Alibaba Open-Source) - Fallback 1
-3. DeepSeek R1 70B (DeepSeek Open-Source) - Fallback 2
-4. Mixtral 8x7B (Mistral AI Open-Source) - Fallback 3
-5. Ollama Local (100% Offline no PC) - Fallback 4
+Envia o texto transcrito da pregação (.txt/.json) para a infraestrutura de supercomputadores na nuvem do Groq
+(Llama 3.3 70B, Qwen 2.5 72B, DeepSeek R1 70B, Mixtral) com uso ZERO de RAM/CPU da sua máquina local.
 """
 
 import os
 import re
 import json
 import logging
-import urllib.request
 from typing import Dict, Any, Optional
 from pathlib import Path
 
@@ -22,7 +17,6 @@ sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 from config.settings import (
     GROQ_API_KEY, GROQ_MODEL_NAME, GROQ_FALLBACK_MODELS,
-    OLLAMA_HOST, OLLAMA_MODEL_NAME,
     GEMINI_API_KEY, GEMINI_MODEL_NAME
 )
 
@@ -100,7 +94,7 @@ RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem nenhum texto ou markdown extra 
 
 class ContentMinerLLM:
     """
-    Minerador de insights resiliente com suporte a múltiplos modelos Open-Source.
+    Minerador de insights resiliente com suporte aos modelos Open-Source na Nuvem via Groq Cloud API.
     """
 
     def __init__(self, groq_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None):
@@ -113,7 +107,7 @@ class ContentMinerLLM:
         if HAS_GROQ and self.groq_api_key:
             try:
                 self.groq_client = Groq(api_key=self.groq_api_key)
-                logger.info("⚡ Conectado à infraestrutura Groq API (Múltiplos modelos Open-Source).")
+                logger.info("⚡ Conectado à infraestrutura Groq Cloud API (Processamento 100% na Nuvem).")
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao inicializar Groq Client: {e}")
 
@@ -126,7 +120,7 @@ class ContentMinerLLM:
 
     def mine_transcription(self, text_content: str, title: str = "") -> Dict[str, Any]:
         """
-        Submete a transcrição cascateando pelos modelos Open-Source até obter resposta parsed com sucesso.
+        Submete a transcrição aos modelos Open-Source hospedados na Nuvem Groq (Llama 3.3 70B -> Qwen 2.5 72B -> DeepSeek R1 70B -> Mixtral).
         """
         if not text_content or len(text_content.strip()) < 50:
             logger.warning("⚠️ Texto da transcrição curto demais para mineração.")
@@ -134,11 +128,11 @@ class ContentMinerLLM:
 
         prompt_user = f"Título do Culto: {title}\n\nTexto Integral da Pregação:\n{text_content[:25000]}"
 
-        # 1. Tenta a fila de modelos Open-Source na Groq API (Llama 3.3 70B -> Qwen 2.5 72B -> DeepSeek R1 70B -> Mixtral)
+        # 1. Tenta a fila de modelos Open-Source hospedados na Nuvem da Groq API
         if self.groq_client:
             for model_id in GROQ_FALLBACK_MODELS:
                 try:
-                    logger.info(f"⚡ Tentando mineração com Modelo Open-Source: '{model_id}' via Groq...")
+                    logger.info(f"⚡ Enviando para a Nuvem Groq (Modelo Open-Source: '{model_id}')...")
                     chat_completion = self.groq_client.chat.completions.create(
                         messages=[
                             {"role": "system", "content": PROMPT_SYSTEM},
@@ -152,17 +146,12 @@ class ContentMinerLLM:
                         resp_text = chat_completion.choices[0].message.content
                         parsed = self._clean_and_parse_json(resp_text)
                         if parsed:
-                            logger.info(f"✅ SUCESSO! Resposta processada via modelo Open-Source '{model_id}'.")
+                            logger.info(f"✅ SUCESSO! Resposta processada na nuvem via modelo Open-Source '{model_id}'.")
                             return parsed
                 except Exception as e:
                     logger.warning(f"⚠️ Modelo '{model_id}' oscilou ou excedeu limite: {e}. Tentando próximo modelo Open-Source...")
 
-        # 2. Tenta a API do Ollama Local (100% Offline no computador do usuário)
-        ollama_res = self._try_ollama_local(prompt_user)
-        if ollama_res:
-            return ollama_res
-
-        # 3. Tenta o Google Gemini como fallback opcional de nuvem
+        # 2. Tenta o Google Gemini como fallback de nuvem
         if self.gemini_client:
             try:
                 logger.info(f"✅ Tentando fallback Gemini API ({GEMINI_MODEL_NAME})...")
@@ -182,36 +171,9 @@ class ContentMinerLLM:
             except Exception as e:
                 logger.warning(f"⚠️ Erro na chamada ao Gemini API: {e}")
 
-        # 4. Fallback Heurístico Estruturado
-        logger.info("ℹ️ Utilizando minerador de fallback estruturado local.")
+        # 3. Fallback Heurístico Estruturado
+        logger.info("ℹ️ Utilizando minerador de fallback estruturado.")
         return self._fallback_mining(title, text_content)
-
-    def _try_ollama_local(self, prompt_user: str) -> Optional[Dict[str, Any]]:
-        """Tenta enviar a requisição para o servidor do Ollama local em http://localhost:11434."""
-        url = f"{OLLAMA_HOST}/api/generate"
-        payload = {
-            "model": OLLAMA_MODEL_NAME,
-            "prompt": f"{PROMPT_SYSTEM}\n\n{prompt_user}",
-            "stream": False,
-            "format": "json"
-        }
-        try:
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                if resp.status == 200:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    raw_text = data.get("response", "")
-                    parsed = self._clean_and_parse_json(raw_text)
-                    if parsed:
-                        logger.info(f"🦙 SUCESSO! Resposta processada via Ollama Local ({OLLAMA_MODEL_NAME}).")
-                        return parsed
-        except Exception:
-            pass
-        return None
 
     def _clean_and_parse_json(self, raw_text: str) -> Optional[Dict[str, Any]]:
         try:
@@ -270,4 +232,4 @@ class ContentMinerLLM:
 
 if __name__ == "__main__":
     miner = ContentMinerLLM()
-    print("ContentMinerLLM pronto com suporte a múltiplos modelos Open-Source (Llama 3.3 70B, Qwen 2.5 72B, DeepSeek R1, Mixtral e Ollama)!")
+    print("ContentMinerLLM pronto e otimizado 100% para processamento em Nuvem via Groq Cloud API!")
