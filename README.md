@@ -1,92 +1,59 @@
-# 🏛️ IBPM CR AUTOMATION SYSTEM - FASE 1
+# 🏛️ IBPM CR AUTOMATION SYSTEM
 
-**Ecossistema de Automação, Ingestão de Áudio e Mineração de PLN do Canal @ibpmcr7976 (Igreja Batista Pentecostal Mundial - Campo Grande, RJ).**
+**Ecossistema Modular de Ingestão de Áudio, Transcrição em GPU, Mineração de Inteligência Teológica (Gemini 1.5 Flash / Groq LLM) e Produção de Conteúdo do Canal @ibpmcr7976 (Igreja Batista Pentecostal Mundial - Campo Grande, RJ).**
 
 ---
 
-## 🎯 Arquitetura em 4 Etapas Independentes e Idempotentes
-
-Para garantir máxima estabilidade e eficiência em máquinas locais com CPU, a FASE 1 foi estruturada em 4 etapas isoladas:
+## 🎯 Arquitetura Modular em 4 Fases ETL (Desacoplada & Resiliente)
 
 ```text
 ibpmcr-automation-system/
-├── config/
-│   └── settings.py                 # Configurações de caminhos locais e parâmetros do Whisper
-├── data/
-│   ├── db/
-│   │   └── ibpmcr_master.db        # Banco SQLite local relacional
-│   ├── json/
-│   │   └── plano_mestre_ibpmcr.json # Plano Mestre consolidado
-│   └── audio_podcasts/             # Áudios (.mp3/.m4a) + Transcrições (.txt e .json)
-├── reports/                        # Relatórios executivos em HTML e PDF
-├── src/
-│   ├── core/
-│   │   └── state_manager.py        # Gerenciador de estado idempotente no SQLite
-│   └── discovery/
-│       ├── channel_sweeper.py      # Varredura do /streams + Download de MP3s com índice 001_...
-│       ├── transcriber_batch.py    # Transcritor sequencial leitor de MP3 local (.txt / .json)
-│       ├── content_analyzer.py     # Mineração PLN dos 25 pilares (Strict Grounding)
-│       └── generate_report.py      # Gerador de relatórios executivos (HTML/PDF)
-├── 1_baixar_audios.py              # Etapa 1: Download ordenado de MP3s leves (001 a 447+)
-├── 2_transcrever_fila.py           # Etapa 2: Transcrição em fila sequencial via Faster-Whisper
-├── 3_analisar_conteudo.py          # Etapa 3: Mineração PLN 100% fiel ao texto do SQLite
-├── 4_gerar_relatorio.py            # Etapa 4: Exportação do Plano Mestre JSON e PDFs
-├── upload_monitorado.py            # Ferramenta de Upload Resiliente para Google Drive via Rclone
-├── requirements.txt
-└── README.md
+├── 📥 FASE 1: INGESTÃO & SINCRONIZAÇÃO
+│   ├── 1_baixar_audios.py          # Download ordenado dos cultos (001 a 449+)
+│   └── upload_monitorado.py        # Upload resiliente para Google Drive via Rclone
+│
+├── 🎙️ FASE 2: TRANSCRIÇÃO EM MASSA GPU (GOOGLE COLAB)
+│   └── colab_fase2_transcricao_gpu.py  # Transcrição Faster-Whisper Large-v3 (GPU T4) -> .txt/.json no Drive
+│
+├── 🧠 FASE 3: HUB INTELIGENTE DE MINERAÇÃO (NUVEM)
+│   ├── 3_mineracao_fase3.py        # Mineração com Gemini 1.5 Flash / Groq LLM (Freio ABS 4.5s)
+│   └── src/discovery/content_miner_llm.py # Extrator dos 6 Pilares Estruturados em JSON
+│
+└── 🎬 FASE 4: AUTOMAÇÃO DE CORTES E GERAÇÃO DE ATIVOS (EM CONSTRUÇÃO)
+    ├── Gerador de Cortes em Vídeo 9:16 (Corte por Timestamps do JSON)
+    ├── Renderização de Legendas Animadas (Burned-in Captions)
+    └── Exportação do Plano Mestre Consolidado e Relatórios Executivos (PDF/HTML)
 ```
 
 ---
 
-## 🚀 Como Executar Sequencialmente no Terminal
+## 📋 Os 6 Pilares Extraídos na Fase 3 (Mineração Teológica & Viral)
 
-### 📥 1. Etapa 1: Download Organizado dos Áudios MP3 (001 a N)
-Varre prioritariamente a aba `/streams`, ordena cronologicamente do 1º culto em 02/10/2022 ao mais recente e salva na pasta `data/audio_podcasts/` com o padrão `001_YYYY-MM-DD_[VIDEO_ID]_[TITULO].mp3`:
-```powershell
-python 1_baixar_audios.py
-```
+Cada culto transcrito é minerado pela IA na nuvem e retorna um objeto JSON estritamente formatado com 6 pilares:
 
-### 🎙️ 2. Etapa 2: Transcrição Sequencial via Faster-Whisper
-Lê os arquivos de áudio do HD em ordem cronológica e gera os arquivos `.txt` e `.json` ao lado de cada áudio, atualizando o SQLite:
-```powershell
-# Transcrever todos os pendentes:
-python 2_transcrever_fila.py
-
-# Ou transcrever em lotes de 10 cultos por rodada:
-python 2_transcrever_fila.py --batch-size 10
-```
-
-### ☁️ 3. Upload Resiliente e Monitorado para o Google Drive (Rclone)
-Para subir todos os áudios, arquivos `.txt` e `.json` para o seu Google Drive com reconexão automática em caso de queda de sinal:
-
-1. **Configuração Inicial do Rclone (Feito uma única vez):**
-   ```bash
-   rclone config
-   ```
-   * Digite `n` para criar um novo remote.
-   * Dê o nome de **`meudrive`**.
-   * Selecione a opção **Google Drive** e faça a autenticação no seu navegador.
-
-2. **Iniciar o Upload Resiliente:**
-   ```bash
-   python upload_monitorado.py
-   ```
+1. **`01_tema_central`**: Resumo executivo teológico do culto em 2 a 3 parágrafos curtos.
+2. **`02_frases_virais`**: Lista com as 4 frases de maior impacto e poder de memorização.
+3. **`03_passagens_biblicas`**: Referências de livros, capítulos e versículos citados no áudio.
+4. **`04_ideia_carrossel_instagram`**: Estrutura pronta de 4 slides para postagem em carrossel.
+5. **`05_cortes_virais`**: 3 sugestões de cortes virais para Reels/TikTok contendo:
+   - Título impactante
+   - Contexto do momento
+   - Sugestão visual de B-Roll
+   - Score viral (0 a 100)
+   - Citação exata do trecho inicial e final falado
+6. **`06_prompt_thumbnail`**: Prompt descritivo em inglês para geração de capas cinematográficas no Midjourney.
 
 ---
 
-### 🧠 4. Etapa 3: Mineração PLN (Strict Grounding - 25 Pilares)
-Analisa EXCLUSIVAMENTE os textos e timestamps gravados no SQLite, identificando trechos de Shorts 9:16, passagens bíblicas reais, timeline da liturgia e score viral:
-```powershell
-python 3_analisar_conteudo.py
-```
+## 🚀 Como Executar o Fluxo no Colab e no Terminal
 
-### 📊 5. Etapa 4: Exportação de JSON e Relatórios Executivos
-Exporta o `plano_mestre_ibpmcr.json` e gera os relatórios em PDF (`PLANO_MESTRE_IBPMCR_COMPLETO.pdf`) e HTML:
-```powershell
-python 4_gerar_relatorio.py
-```
+### 🎙️ Fase 2 (Google Colab GPU T4):
+Execute a célula do `colab_fase2_transcricao_gpu.py` no Google Colab. Ele transcreve os áudios enviados pelo Rclone em velocidade máxima e grava os arquivos `.txt` e `.json` diretamente na pasta `audio_podcasts/transcricoes/` no seu Google Drive.
+
+### 🧠 Fase 3 (Hub Inteligente):
+Os arquivos `.txt` salvos no Drive são minerados pelo Gemini 1.5 Flash ou Groq LLM (Llama 3.3 70B). O script aplica o controle de vazão de 4.5 segundos ("Freio ABS") para respeitar rigorosamente o limite de 15 RPM da API gratuita.
 
 ---
 
-## 🛡️ Idempotência e Resiliência
-Todas as etapas consultam o banco SQLite (`data/db/ibpmcr_master.db`) antes de executar qualquer operação. Se a conexão cair, a energia for interrompida ou você fechar o terminal, basta rodar novamente o script da etapa desejada e ele **continuará exatamente de onde parou!**
+## 🛡️ Idempotência e Resiliência Atômica
+Todas as fases consultam o banco de dados SQLite (`ibpmcr_master.db`) e os arquivos do Google Drive antes de processar qualquer item. Se um processo for interrompido, o sistema recomeça exatamente do ponto onde parou de forma segura (usando escrita atômica `.tmp`).

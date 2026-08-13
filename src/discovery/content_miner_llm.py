@@ -1,12 +1,13 @@
 """
-Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Groq Open-Source Cloud API).
+Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Gemini 1.5 Flash / Groq LLM API).
 
-Envia o texto transcrito da pregação (.txt/.json) para a infraestrutura de supercomputadores na nuvem do Groq
-(Llama 3.3 70B, Qwen 2.5 72B, DeepSeek R1 70B, Mixtral) com uso ZERO de RAM/CPU da sua máquina local.
+Lê o texto transcrito da pregação (.txt/.json) gerado na Fase 2 e envia para a API do Google Gemini 1.5 Flash (ou Groq Llama 3.3 70B)
+com travamento no formato JSON dos 6 pilares e controle de vazão ("Freio ABS" de 4.5s / 15 RPM).
 """
 
 import os
 import re
+import time
 import json
 import logging
 from typing import Dict, Any, Optional
@@ -15,7 +16,14 @@ from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
-from config.settings import GROQ_API_KEY, GROQ_MODEL_NAME, GROQ_FALLBACK_MODELS
+from config.settings import GROQ_API_KEY, GROQ_MODEL_NAME, GROQ_FALLBACK_MODELS, GEMINI_API_KEY
+
+try:
+    from google import genai
+    from google.genai import types
+    HAS_GOOGLE_GENAI = True
+except ImportError:
+    HAS_GOOGLE_GENAI = False
 
 try:
     from groq import Groq
@@ -84,25 +92,34 @@ RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem nenhum texto ou markdown extra 
 
 class ContentMinerLLM:
     """
-    Minerador de insights resiliente focado 100% nos modelos Open-Source hospedados na Nuvem da Groq API.
+    Hub de Inteligência e Mineração de Conteúdo da Fase 3 com suporte a Gemini 1.5 Flash e Groq Cloud API.
+    Possui controle de vazão ("Freio ABS" de 4.5s) para respeitar o limite de 15 RPM da conta gratuita.
     """
 
-    def __init__(self, groq_api_key: Optional[str] = None):
+    def __init__(self, gemini_api_key: Optional[str] = None, groq_api_key: Optional[str] = None):
+        self.gemini_api_key = gemini_api_key or GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
         self.groq_api_key = groq_api_key or GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
+        
+        self.gemini_client = None
         self.groq_client = None
+
+        if HAS_GOOGLE_GENAI and self.gemini_api_key:
+            try:
+                self.gemini_client = genai.Client(api_key=self.gemini_api_key)
+                logger.info("⚡ Conectado ao Google Gemini 1.5 Flash API (Nuvem).")
+            except Exception as e:
+                logger.warning(f"⚠️ Erro ao inicializar Gemini Client: {e}")
 
         if HAS_GROQ and self.groq_api_key:
             try:
                 self.groq_client = Groq(api_key=self.groq_api_key)
-                logger.info("⚡ Conectado à infraestrutura Groq Cloud API (Processamento 100% na Nuvem).")
+                logger.info("⚡ Conectado à infraestrutura Groq Cloud API.")
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao inicializar Groq Client: {e}")
-        else:
-            logger.warning("⚠️ GROQ_API_KEY não foi configurada. Defina no arquivo .env.")
 
     def mine_transcription(self, text_content: str, title: str = "") -> Dict[str, Any]:
         """
-        Submete a transcrição aos modelos Open-Source hospedados na Nuvem Groq (Llama 3.3 70B -> Qwen 2.5 72B -> DeepSeek R1 70B -> Mixtral).
+        Submete a transcrição para a API do Gemini 1.5 Flash ou Groq Llama 3.3 70B, retornando os 6 pilares estruturados.
         """
         if not text_content or len(text_content.strip()) < 50:
             logger.warning("⚠️ Texto da transcrição curto demais para mineração.")
@@ -110,7 +127,31 @@ class ContentMinerLLM:
 
         prompt_user = f"Título do Culto: {title}\n\nTexto Integral da Pregação:\n{text_content[:300000]}"
 
-        # 1. Tenta a fila de modelos Open-Source hospedados na Nuvem da Groq API
+        # 1. Tenta a API do Google Gemini 1.5 Flash (Nuvem)
+        if self.gemini_client:
+            try:
+                logger.info("⚡ Enviando pregação para o Google Gemini 1.5 Flash...")
+                response = self.gemini_client.models.generate_content(
+                    model="gemini-1.5-flash",
+                    contents=[PROMPT_SYSTEM, prompt_user],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.3
+                    )
+                )
+                
+                # Freio ABS: pausa de 4.5s para respeitar o limite de 15 Requisições Por Minuto (RPM) no plano grátis
+                time.sleep(4.5)
+
+                if response and response.text:
+                    parsed = self._clean_and_parse_json(response.text)
+                    if parsed:
+                        logger.info("✅ SUCESSO! Insights minerados via Gemini 1.5 Flash.")
+                        return parsed
+            except Exception as e:
+                logger.warning(f"⚠️ Erro ou limite no Gemini API: {e}. Tentando Groq Cloud...")
+
+        # 2. Tenta os modelos Open-Source hospedados na Groq API (Fallback)
         if self.groq_client:
             for model_id in GROQ_FALLBACK_MODELS:
                 try:
@@ -118,22 +159,23 @@ class ContentMinerLLM:
                     chat_completion = self.groq_client.chat.completions.create(
                         messages=[
                             {"role": "system", "content": PROMPT_SYSTEM},
-                            {"role": "user", "content": prompt_user}
+                            {"role": "user", "content": prompt_user[:35000]}  # Ajuste para limite de TPM
                         ],
                         model=model_id,
                         response_format={"type": "json_object"},
                         temperature=0.3
                     )
+                    time.sleep(2.0)
                     if chat_completion and chat_completion.choices:
                         resp_text = chat_completion.choices[0].message.content
                         parsed = self._clean_and_parse_json(resp_text)
                         if parsed:
-                            logger.info(f"✅ SUCESSO! Resposta processada na nuvem via modelo Open-Source '{model_id}'.")
+                            logger.info(f"✅ SUCESSO! Resposta processada via modelo '{model_id}'.")
                             return parsed
                 except Exception as e:
-                    logger.warning(f"⚠️ Modelo '{model_id}' oscilou ou excedeu limite: {e}. Tentando próximo modelo Open-Source...")
+                    logger.warning(f"⚠️ Modelo '{model_id}' oscilou: {e}. Tentando próximo...")
 
-        # 2. Fallback Heurístico Estruturado
+        # 3. Fallback Heurístico Estruturado
         logger.info("ℹ️ Utilizando minerador de fallback estruturado.")
         return self._fallback_mining(title, text_content)
 
@@ -194,4 +236,4 @@ class ContentMinerLLM:
 
 if __name__ == "__main__":
     miner = ContentMinerLLM()
-    print("ContentMinerLLM pronto e otimizado 100% para Groq Cloud API!")
+    print("ContentMinerLLM pronto e alinhado com a Fase 3 (Gemini 1.5 Flash + Groq LLM)!")
