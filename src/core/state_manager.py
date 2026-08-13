@@ -1,8 +1,8 @@
 """
-Gerenciador de Estado do Banco de Dados SQLite Relacional (Etapa 1 - IBPM CR).
+Gerenciador de Estado do Banco de Dados SQLite Relacional (Etapa 1 & 2 - IBPM CR).
 
 Gerencia o inventário relacional de vídeos, salvando o índice sequencial (001 a 447+),
-a nomenclatura sanitizada dos arquivos MP3 e o controle de idempotência do download.
+a nomenclatura sanitizada dos arquivos, status de download de áudio e transcrição.
 """
 
 import os
@@ -168,6 +168,30 @@ class MasterPlanManager:
             """, (audio_path, now_str, video_id))
             conn.commit()
 
+    def save_transcription_result(self, video_id: str, full_text: str, segments_json: str, tipo_transcricao: str = "concluida") -> None:
+        """Grava a transcrição e os segmentos com timestamps no SQLite e marca transcrito = 1."""
+        now_str = datetime.now(timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+            UPDATE videos SET
+                transcrito = 1,
+                texto_transcrito = ?,
+                segmentos_json = ?,
+                tipo_transcricao = ?,
+                updated_at = ?
+            WHERE video_id = ?
+            """, (full_text, segments_json, tipo_transcricao, now_str, video_id))
+            conn.commit()
+
+    def is_transcribed(self, video_id: str) -> bool:
+        """Verifica no SQLite se o vídeo já foi transcrito."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT transcrito, texto_transcrito FROM videos WHERE video_id = ?", (video_id,))
+            row = cursor.fetchone()
+            return bool(row and row["transcrito"] == 1 and row["texto_transcrito"] and len(row["texto_transcrito"].strip()) > 50)
+
     def is_audio_downloaded(self, video_id: str) -> bool:
         """Checa no SQLite e no sistema de arquivos se o áudio já foi baixado (Idempotência)."""
         with self._get_connection() as conn:
@@ -181,7 +205,7 @@ class MasterPlanManager:
 
         if os.path.exists(AUDIO_DIR):
             for fname in os.listdir(AUDIO_DIR):
-                if video_id in fname:
+                if video_id in fname and not fname.endswith(".txt") and not fname.endswith(".json"):
                     full_p = os.path.join(AUDIO_DIR, fname)
                     if os.path.getsize(full_p) > 10000:
                         self.mark_audio_downloaded(video_id, full_p)
@@ -198,4 +222,4 @@ class MasterPlanManager:
 
 if __name__ == "__main__":
     mgr = MasterPlanManager()
-    print("MasterPlanManager com timeout de SQLite atualizado!")
+    print("MasterPlanManager atualizado com suporte completo à Etapa 2!")

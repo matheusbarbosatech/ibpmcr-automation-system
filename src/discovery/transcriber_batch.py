@@ -1,8 +1,14 @@
 """
-Módulo de Transcrição Sequencial em Lote (Etapa 2 - IBPM CR).
+Módulo de Transcrição Sequencial em Lote por IA (Etapa 2 - IBPM CR).
 
-Lê os arquivos de áudio MP3/M4A salvos no HD local e executa a transcrição
-palavra por palavra via Faster-Whisper no CPU (device="cpu", compute_type="int8", model_size="base").
+Lê os arquivos de áudio baixados no HD local na pasta data/audio_podcasts/
+e transcreve a pregação na ordem cronológica (001, 002, 003...) via Faster-Whisper no CPU.
+
+Requisitos Atendidos:
+1. Gera e salva arquivos .txt e .json na MESMA PASTA do áudio (data/audio_podcasts/).
+2. Sincroniza e grava a transcrição completa e os segmentos no SQLite local.
+3. Faster-Whisper CPU (device="cpu", compute_type="int8", model_size="base", language="pt").
+4. Idempotência e Resiliência.
 """
 
 import os
@@ -10,10 +16,13 @@ import json
 import logging
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+from tqdm import tqdm
 
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+
 from config.settings import WHISPER_MODEL_SIZE, WHISPER_DEVICE, WHISPER_COMPUTE_TYPE, AUDIO_DIR
+from src.core.state_manager import MasterPlanManager
 
 try:
     from faster_whisper import WhisperModel
@@ -21,19 +30,13 @@ try:
 except ImportError:
     HAS_FASTER_WHISPER = False
 
-try:
-    from youtube_transcript_api import YouTubeTranscriptApi
-    HAS_YT_TRANSCRIPT = True
-except ImportError:
-    HAS_YT_TRANSCRIPT = False
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("TranscriberBatch")
 
 
 class BatchTranscriber:
     """
-    Transcritor sequencial leitor de arquivos de áudio locais do HD.
+    Transcritor sequencial em lote que gera .txt, .json e atualiza o SQLite.
     """
 
     def __init__(self, model_size: str = WHISPER_MODEL_SIZE):
@@ -41,106 +44,166 @@ class BatchTranscriber:
         self.device = WHISPER_DEVICE
         self.compute_type = WHISPER_COMPUTE_TYPE
         self.model = None
+        self.state_mgr = MasterPlanManager()
 
         if HAS_FASTER_WHISPER:
             try:
+                logger.info(f"⚡ Inicializando Faster-Whisper (Modelo: '{self.model_size}' | Device: '{self.device}' | Compute: '{self.compute_type}')...")
                 self.model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
-                logger.info(f"✅ Faster-Whisper ({self.model_size} / INT8 CPU) carregado com sucesso.")
+                logger.info(f"✅ Faster-Whisper carregado com sucesso.")
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao carregar Faster-Whisper: {e}")
 
-    def transcribe_audio_file(self, audio_path: str, video_id: str = "") -> Dict[str, Any]:
+    def process_pending_queue(self, max_items: int = 10, force: bool = False) -> int:
         """
-        Transcreve um arquivo de áudio local MP3/M4A usando o Faster-Whisper.
+        Lê a fila de cultos cadastrados no SQLite na ordem cronológica (001 a 447+),
+        transcreve os áudios locais e salva .txt e .json na pasta data/audio_podcasts/.
         """
-        # 1. Tenta extração via Faster-Whisper se o arquivo for real (> 10 KB)
-        if self.model and os.path.exists(audio_path) and os.path.getsize(audio_path) > 10000:
+        all_videos = self.state_mgr.get_all_videos_chronological()
+        
+        processed = 0
+        skipped = 0
+
+        # Filtra vídeos que possuem áudio no disco e ainda não foram transcritos (ou com force=True)
+        pending_list = []
+        for v in all_videos:
+            v_id = v["video_id"]
+            
+            # Localiza o arquivo de áudio no disco (MP3, M4A ou WEBM)
+            audio_path = self._find_audio_file_on_disk(v_id)
+            if not audio_path:
+                continue
+
+            # Checa se os arquivos de transcrição (.txt e .json) já existem no disco
+            base_path = os.path.splitext(audio_path)[0]
+            txt_path = base_path + ".txt"
+            json_path = base_path + ".json"
+
+            already_done = (
+                not force and
+                self.state_mgr.is_transcribed(v_id) and
+                os.path.exists(txt_path) and os.path.getsize(txt_path) > 100
+            )
+
+            if already_done:
+                skipped += 1
+            else:
+                v["audio_path_real"] = audio_path
+                v["txt_path_target"] = txt_path
+                v["json_path_target"] = json_path
+                pending_list.append(v)
+
+        logger.info(f"📋 Fila de Transcrição: {len(pending_list)} cultos pendentes (Ignorados já concluídos: {skipped}).")
+
+        if not pending_list:
+            logger.info("🎉 Todos os cultos da fila já estão transcritos!")
+            return 0
+
+        items_to_process = pending_list[:max_items]
+        pbar = tqdm(items_to_process, desc="Transcrevendo Cultos", unit="áudio")
+
+        for item in pbar:
+            v_id = item["video_id"]
+            idx = item.get("indice_sequencial", 1)
+            date_str = str(item.get("data_publicacao", ""))[:10]
+            title = item.get("titulo_sanitizado", "culto")
+            audio_path = item["audio_path_real"]
+
+            display_name = f"[{idx:03d}/{len(all_videos):03d}] {idx:03d}_{date_str}_{v_id}_{title[:25]}"
+            pbar.set_postfix_str(display_name)
+
             try:
-                file_name = os.path.basename(audio_path)
-                size_mb = round(os.path.getsize(audio_path) / (1024 * 1024), 1)
-                logger.info(f"🎙️ Transcrevendo áudio local: {file_name} ({size_mb} MB) via Faster-Whisper CPU...")
-
-                segments, info = self.model.transcribe(audio_path, language="pt", beam_size=2)
-
-                segments_data = []
-                full_text_parts = []
-
-                for seg in segments:
-                    item = {
-                        "segment_id": seg.id,
-                        "start_sec": round(seg.start, 2),
-                        "end_sec": round(seg.end, 2),
-                        "text": seg.text.strip()
-                    }
-                    segments_data.append(item)
-                    full_text_parts.append(seg.text.strip())
-
-                logger.info(f"✅ Transcrição concluída! ({len(segments_data)} segmentos gravados)")
-                return {
-                    "language": info.language,
-                    "duration_sec": round(info.duration, 2),
-                    "texto_completo": " ".join(full_text_parts),
-                    "segmentos_timestamps": segments_data,
-                    "tipo_transcricao": "audio_real"
-                }
+                res = self.transcribe_single_audio(audio_path, video_id=v_id, item_meta=item)
+                if res and res.get("texto_completo"):
+                    processed += 1
             except Exception as e:
-                logger.warning(f"⚠️ Erro ao transcrever com Faster-Whisper: {e}")
+                logger.warning(f"⚠️ Erro ao transcrever culto {v_id}: {e}")
 
-        # 2. Tenta extração de legendas oficiais da API se tiver o video_id (< 0.1 seg)
-        if HAS_YT_TRANSCRIPT and video_id:
-            try:
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['pt', 'pt-BR'])
-                if transcript_list:
-                    res = self._parse_transcript_api(transcript_list)
-                    res["tipo_transcricao"] = "transcript_oficial"
-                    return res
-            except Exception:
-                pass
+        return processed
 
-        # 3. Fallback estruturado se o áudio não pôde ser transcrito
-        res = self._generate_structured_transcription()
-        res["tipo_transcricao"] = "fast_sweep"
-        return res
+    def transcribe_single_audio(self, audio_path: str, video_id: str, item_meta: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Transcreve um arquivo de áudio individual, salva .txt e .json na pasta data/audio_podcasts/
+        e atualiza os registros no banco de dados SQLite.
+        """
+        base_path = os.path.splitext(audio_path)[0]
+        txt_path = base_path + ".txt"
+        json_path = base_path + ".json"
 
-    def _parse_transcript_api(self, transcript_list: Any) -> Dict[str, Any]:
-        segments_data = []
-        full_text_parts = []
-        for i, item in enumerate(transcript_list, 1):
-            if isinstance(item, dict):
-                start = round(float(item.get("start", 0.0)), 2)
-                duration = round(float(item.get("duration", 0.0)), 2)
-                text = str(item.get("text", "")).strip()
+        # 1. Executa a transcrição via Faster-Whisper CPU
+        if self.model and os.path.exists(audio_path) and os.path.getsize(audio_path) > 10000:
+            size_mb = round(os.path.getsize(audio_path) / (1024 * 1024), 1)
+            file_name = os.path.basename(audio_path)
+            logger.info(f"\n🎙️ Transcrevendo: {file_name} ({size_mb} MB) no CPU INT8...")
 
-                segments_data.append({
-                    "segment_id": i,
-                    "start_sec": start,
-                    "end_sec": round(start + duration, 2),
-                    "text": text
-                })
-                full_text_parts.append(text)
+            segments, info = self.model.transcribe(
+                audio_path,
+                language="pt",
+                beam_size=2,
+                vad_filter=True
+            )
 
-        total_dur = segments_data[-1]["end_sec"] if segments_data else 3600.0
-        return {
-            "language": "pt",
-            "duration_sec": total_dur,
-            "texto_completo": " ".join(full_text_parts),
-            "segmentos_timestamps": segments_data
-        }
+            segments_data = []
+            full_text_parts = []
 
-    def _generate_structured_transcription(self) -> Dict[str, Any]:
-        segments = [
-            {"segment_id": 1, "start_sec": 0.0, "end_sec": 600.0, "text": "Graça e paz a toda a Igreja Batista Pentecostal Mundial no culto de hoje em Campo Grande RJ."},
-            {"segment_id": 2, "start_sec": 605.0, "end_sec": 2400.0, "text": "Mensagem edificante sobre oração, fé, restauração da família, libertação e vitória em Cristo Jesus."},
-            {"segment_id": 3, "start_sec": 2405.0, "end_sec": 3600.0, "text": "Momento de clamor no altar, oração pelos enfermos, dízimos, ofertas e bênção apostólica."}
-        ]
-        return {
-            "language": "pt",
-            "duration_sec": 3600.0,
-            "texto_completo": " ".join([s["text"] for s in segments]),
-            "segmentos_timestamps": segments
-        }
+            for seg in segments:
+                item = {
+                    "segment_id": seg.id,
+                    "start_sec": round(seg.start, 2),
+                    "end_sec": round(seg.end, 2),
+                    "text": seg.text.strip()
+                }
+                segments_data.append(item)
+                full_text_parts.append(seg.text.strip())
+
+            full_text = " ".join(full_text_parts)
+            segments_json_str = json.dumps(segments_data, ensure_ascii=False, indent=2)
+
+            # 2. Salva o arquivo de texto simples .txt na MESMA PASTA do áudio
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(full_text)
+            logger.info(f"📄 Arquivo .txt salvo: {txt_path}")
+
+            # 3. Salva o arquivo .json com timestamps na MESMA PASTA do áudio
+            with open(json_path, "w", encoding="utf-8") as f:
+                f.write(segments_json_str)
+            logger.info(f"📊 Arquivo .json salvo: {json_path}")
+
+            # 4. Sincroniza e grava no banco de dados SQLite
+            self.state_mgr.save_transcription_result(
+                video_id=video_id,
+                full_text=full_text,
+                segments_json=segments_json_str,
+                tipo_transcricao="whisper_cpu_int8"
+            )
+            logger.info(f"💾 Transcrição sincronizada no SQLite para o vídeo {video_id}.")
+
+            return {
+                "language": info.language,
+                "duration_sec": round(info.duration, 2),
+                "texto_completo": full_text,
+                "segmentos_timestamps": segments_data,
+                "txt_path": txt_path,
+                "json_path": json_path
+            }
+
+        else:
+            logger.warning(f"⚠️ Áudio não encontrado ou inválido: {audio_path}")
+            return {}
+
+    def _find_audio_file_on_disk(self, video_id: str) -> Optional[str]:
+        """Procura o arquivo de áudio físico (MP3, M4A, WEBM) no diretório data/audio_podcasts/."""
+        if not os.path.exists(AUDIO_DIR):
+            return None
+
+        for fname in os.listdir(AUDIO_DIR):
+            if video_id in fname and not fname.endswith(".txt") and not fname.endswith(".json") and not fname.endswith(".part") and not fname.endswith(".ytdl"):
+                full_p = os.path.join(AUDIO_DIR, fname)
+                if os.path.getsize(full_p) > 10000:
+                    return full_p
+        return None
 
 
 if __name__ == "__main__":
     bt = BatchTranscriber()
-    print("TranscriberBatch inicializado!")
+    print("TranscriberBatch inicializado e pronto!")
