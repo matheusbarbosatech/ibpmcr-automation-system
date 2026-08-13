@@ -1,6 +1,11 @@
 # ===========================================================================
 # 🚀 FASE 3 PURA: MINERAÇÃO DE CONTEÚDO (GEMINI 1.5 FLASH + FREIO ABS)
 # ===========================================================================
+# Estrutura de Pastas Unificada em audio_podcasts/:
+# G:\Meu Drive\IBPM_CR_Cortes\audio_podcasts\
+# ├── [arquivos .mp3 / .webm] (Áudios dos Cultos)
+# ├── transcricoes/          (Arquivos .txt e .json da Fase 2)
+# └── conteudos_fase3/       (Arquivos .insights.json da Fase 3)
 
 import os, json, sqlite3, time
 from pathlib import Path
@@ -29,37 +34,80 @@ ia_model = genai.GenerativeModel(
     generation_config={"response_mime_type": "application/json", "temperature": 0.3}
 )
 
-# 📂 PASTAS NO SEU GOOGLE DRIVE
+# 📂 ESTRUTURA DE PASTAS UNIFICADA NO SEU GOOGLE DRIVE
 GDRIVE_DIR = Path("/content/drive/MyDrive/IBPM_CR_Cortes")
-TRANSCRICOES_DIR = GDRIVE_DIR / "audio_podcasts" / "transcricoes"
-INSIGHTS_DIR = GDRIVE_DIR / "insights_fase3"
+AUDIO_PODCASTS_DIR = GDRIVE_DIR / "audio_podcasts"
+TRANSCRICOES_DIR = AUDIO_PODCASTS_DIR / "transcricoes"
+INSIGHTS_DIR = AUDIO_PODCASTS_DIR / "conteudos_fase3"
 DB_PATH = GDRIVE_DIR / "ibpmcr_master.db"
 
+# Cria a estrutura de subpastas unificada no Drive
+TRANSCRICOES_DIR.mkdir(parents=True, exist_ok=True)
 INSIGHTS_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 print("===========================================================================")
-print(" 🚀 FASE 3: HUB INTELIGENTE DE MINERAÇÃO (GEMINI 1.5 FLASH)")
+print(" 🚀 FASE 3: HUB INTELIGENTE DE MINERAÇÃO (ESTRUTURA UNIFICADA)")
+print(f"    Origem Transcrições: {TRANSCRICOES_DIR}")
+print(f"    Destino Conteúdos:   {INSIGHTS_DIR}")
 print("    Capacidade: 1 Milhão de Tokens | Modo: JSON Forçado | Proteção: Freio ABS")
 print("===========================================================================\n")
 
-# PROMPT DO SISTEMA (A Engenharia dos 6 Pilares)
-PROMPT_SYSTEM = """Você é um Curador de Conteúdo e Teólogo Sênior especializado em comunicação cristã.
-Analise a pregação integral fornecida e retorne ESTRITAMENTE UM OBJETO JSON VÁLIDO contendo as chaves abaixo. 
-Não adicione formatação markdown fora do JSON.
+# PROMPT DO SISTEMA (Curadoria Teológica & Mineração de Ativos Virais)
+PROMPT_SYSTEM = """Você é um Curador de Conteúdo e Teólogo Sênior especializado em comunicação cristã, evangelismo digital e produção de conteúdo viral para redes sociais (Reels, TikTok, Instagram e YouTube).
+
+Sua tarefa é analisar criticamente o texto integral da pregação do culto da Igreja Batista Pentecostal Mundial (IBPM CR) e extrair insights valiosos com extrema fidelidade teológica e alto potencial de engajamento.
+
+RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem nenhum texto ou markdown extra fora do JSON) contendo as seguintes 6 chaves exatas:
 
 {
-  "01_tema_central": "Resumo executivo da mensagem em 2 a 3 parágrafos curtos.",
-  "02_frases_virais": ["Frase 1", "Frase 2", "Frase 3", "Frase 4"],
-  "03_passagens_biblicas": ["Livro Cap:Vers"],
-  "04_ideia_carrossel_instagram": ["Slide 1", "Slide 2", "Slide 3", "Slide 4"],
-  "05_cortes_virais": [
-    {"titulo": "Título Chamativo", "contexto": "Resumo do corte", "sugestao_b_roll": "Imagem de apoio visual", "score_viral": 95, "trecho_inicial": "primeiras 5 palavras do trecho", "trecho_final": "ultimas 5 palavras do trecho"}
+  "01_tema_central": "Resumo executivo da mensagem principal do culto em 2 a 3 parágrafos curtos.",
+  "02_frases_virais": [
+    "Frase de impacto 1 (forte, memorável e direta)",
+    "Frase de impacto 2",
+    "Frase de impacto 3",
+    "Frase de impacto 4"
   ],
-  "06_prompt_thumbnail": "Cinematic 8k photo of pastor preaching, dramatic lighting, highly detailed..."
+  "03_passagens_biblicas": [
+    "Livro Capítulo:Versículo (ex: João 3:16)",
+    "Livro Capítulo:Versículo"
+  ],
+  "04_ideia_carrossel_instagram": [
+    "Slide 1: [Título Impactante] - Resumo curto",
+    "Slide 2: [Ponto Chave 1] - Explicação",
+    "Slide 3: [Ponto Chave 2] - Aplicação prática",
+    "Slide 4: [Conclusão & Oração] - Chamada para reflexão"
+  ],
+  "05_cortes_virais": [
+    {
+      "titulo": "Título Atrativo do Corte 1",
+      "contexto": "Do que trata este momento",
+      "sugestao_b_roll": "Sugestão visual de cobertura (ex: imagens de oração, tempestade se acalmando, etc)",
+      "score_viral": 95,
+      "trecho_inicial": "Citação exata do início da frase falada (primeiras 5 palavras)",
+      "trecho_final": "Citação exata do fim da frase falada (últimas 5 palavras)"
+    },
+    {
+      "titulo": "Título Atrativo do Corte 2",
+      "contexto": "Do que trata este momento",
+      "sugestao_b_roll": "Sugestão visual de cobertura",
+      "score_viral": 90,
+      "trecho_inicial": "Citação exata do início",
+      "trecho_final": "Citação exata do fim"
+    },
+    {
+      "titulo": "Título Atrativo do Corte 3",
+      "contexto": "Do que trata este momento",
+      "sugestao_b_roll": "Sugestão visual de cobertura",
+      "score_viral": 88,
+      "trecho_inicial": "Citação exata do início",
+      "trecho_final": "Citação exata do fim"
+    }
+  ],
+  "06_prompt_thumbnail": "Cinematic, dramatic lighting, 8k resolution photo of a pastor preaching with passion on stage, warm golden backlight, church sanctuary background, photorealistic, Midjourney prompt style --ar 16:9"
 }"""
 
-# 🔍 MAPEAMENTO DA FILA (Lê apenas os .txt que a Fase 2 já gerou)
+# 🔍 MAPEAMENTO DA FILA (Lê apenas os .txt que a Fase 2 já gerou em transcricoes/)
 txt_files = sorted([f for f in TRANSCRICOES_DIR.glob("*.txt") if f.stat().st_size > 100])
 
 # Filtra apenas os que ainda não foram minerados pela Fase 3 (Idempotência)
@@ -94,11 +142,11 @@ else:
                 full_text = f.read()
             
             # 2. Constrói o Prompt e envia para a IA
-            prompt_completo = f"{PROMPT_SYSTEM}\n\nTítulo: {v_name}\n\nPregação Integral:\n{full_text}"
+            prompt_completo = f"{PROMPT_SYSTEM}\n\nTítulo do Culto: {v_name}\n\nPregação Integral:\n{full_text}"
             response = ia_model.generate_content(prompt_completo)
             
             if response.text:
-                # 3. Salva o JSON na pasta insights_fase3/
+                # 3. Salva o JSON na subpasta unificada conteudos_fase3/
                 with open(insight_path, "w", encoding="utf-8") as f: 
                     f.write(response.text)
                 
