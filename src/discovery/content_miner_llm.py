@@ -108,7 +108,7 @@ class ContentMinerLLM:
             logger.warning("⚠️ Texto da transcrição curto demais para mineração.")
             return self._fallback_mining(title, text_content)
 
-        prompt_user = f"Título do Culto: {title}\n\nTexto Integral da Pregação:\n{text_content[:25000]}"
+        prompt_user = f"Título do Culto: {title}\n\nTexto Integral da Pregação:\n{text_content[:300000]}"
 
         # 1. Tenta a fila de modelos Open-Source hospedados na Nuvem da Groq API
         if self.groq_client:
