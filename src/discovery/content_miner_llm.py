@@ -142,18 +142,19 @@ class ContentMinerLLM:
             return self._fallback_mining(title, text_content)
 
         prompt_user = f"Título do Culto: {title}\n\nTexto Integral da Pregação:\n{text_content[:300000]}"
+        prompt_completo = f"{PROMPT_SYSTEM}\n\n{prompt_user}"
         insights = None
 
         gemini_models_to_try = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
 
-        # 1. Tenta Gemini via SDK Novo
+        # 1. Tenta Gemini via SDK Novo (google-genai)
         if self.gemini_new_client:
             for gmodel in gemini_models_to_try:
                 try:
                     logger.info(f"⚡ Enviando pregação para o Google Gemini ({gmodel})...")
                     response = self.gemini_new_client.models.generate_content(
                         model=gmodel,
-                        contents=[PROMPT_SYSTEM, prompt_user],
+                        contents=prompt_completo,
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",
                             temperature=0.3
@@ -179,8 +180,7 @@ class ContentMinerLLM:
                         gmodel,
                         generation_config={"response_mime_type": "application/json", "temperature": 0.3}
                     )
-                    prompt_full = f"{PROMPT_SYSTEM}\n\nTítulo do Culto: {title}\n\nPregação Integral:\n{text_content[:300000]}"
-                    response = legacy_model.generate_content(prompt_full)
+                    response = legacy_model.generate_content(prompt_completo)
                     time.sleep(4.5)  # Freio ABS (15 RPM)
 
                     if response and response.text:
@@ -315,4 +315,4 @@ class ContentMinerLLM:
 
 if __name__ == "__main__":
     miner = ContentMinerLLM()
-    print("ContentMinerLLM pronto sem restrições de prefixo!")
+    print("ContentMinerLLM pronto com prompt em string unica!")
