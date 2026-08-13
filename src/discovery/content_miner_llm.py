@@ -1,8 +1,8 @@
 """
-Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (LLM - Gemini).
+Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Groq Llama 3.3 70B & Gemini LLM).
 
-Envia o texto transcrito da pregação (.txt/.json) para o Google Gemini API
-atuando como "Curador de Conteúdo e Teólogo Sênior", extraindo os 6 pilares
+Envia o texto transcrito da pregação (.txt/.json) para a API do Groq (Llama 3.3 70B Open-Source)
+ou Google Gemini, atuando como "Curador de Conteúdo e Teólogo Sênior", extraindo os 6 pilares
 estruturados em formato JSON estrito.
 """
 
@@ -16,7 +16,13 @@ from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
-from config.settings import GEMINI_API_KEY, GEMINI_MODEL_NAME
+from config.settings import GROQ_API_KEY, GROQ_MODEL_NAME, GEMINI_API_KEY, GEMINI_MODEL_NAME
+
+try:
+    from groq import Groq
+    HAS_GROQ = True
+except ImportError:
+    HAS_GROQ = False
 
 try:
     from google import genai
@@ -33,7 +39,7 @@ PROMPT_SYSTEM = """Você é um Curador de Conteúdo e Teólogo Sênior especiali
 
 Sua tarefa é analisar criticamente o texto integral da pregação do culto da Igreja Batista Pentecostal Mundial (IBPM CR) e extrair insights valiosos com extrema fidelidade teológica e alto potencial de engajamento.
 
-RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem markdown extra fora do JSON) contendo as seguintes 6 chaves exatas:
+RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem nenhum markdown fora do JSON) contendo as seguintes 6 chaves exatas:
 
 {
   "01_tema_central": "Resumo executivo da mensagem principal do culto em 2 a 3 parágrafos curtos.",
@@ -86,37 +92,70 @@ RETORNE ESTRITAMENTE UM OBJETO JSON VÁLIDO (sem markdown extra fora do JSON) co
 
 class ContentMinerLLM:
     """
-    Minerador de insights com integração oficial ao Google GenAI SDK.
+    Minerador de insights com suporte prioritário à API Groq (Llama 3.3 70B) e Gemini LLM.
     """
 
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
-        self.client_genai = None
+    def __init__(self, groq_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None):
+        self.groq_api_key = groq_api_key or GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
+        self.gemini_api_key = gemini_api_key or GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
+        
+        self.groq_client = None
+        self.gemini_client = None
 
-        if self.api_key:
-            if HAS_GOOGLE_GENAI:
-                try:
-                    self.client_genai = genai.Client(api_key=self.api_key)
-                    logger.info(f"✅ Conectado ao Google GenAI SDK ({GEMINI_MODEL_NAME}).")
-                except Exception as e:
-                    logger.warning(f"⚠️ Erro ao inicializar google.genai Client: {e}")
-        else:
-            logger.warning("⚠️ GEMINI_API_KEY não foi configurada. Defina a variável no arquivo .env.")
+        if HAS_GROQ and self.groq_api_key:
+            try:
+                self.groq_client = Groq(api_key=self.groq_api_key)
+                logger.info(f"⚡ Conectado ao Groq API ({GROQ_MODEL_NAME} - Llama 3.3 70B).")
+            except Exception as e:
+                logger.warning(f"⚠️ Erro ao inicializar Groq Client: {e}")
+
+        if HAS_GOOGLE_GENAI and self.gemini_api_key and not self.groq_client:
+            try:
+                self.gemini_client = genai.Client(api_key=self.gemini_api_key)
+                logger.info(f"✅ Conectado ao Google GenAI SDK ({GEMINI_MODEL_NAME}).")
+            except Exception as e:
+                logger.warning(f"⚠️ Erro ao inicializar Google GenAI Client: {e}")
+
+        if not self.groq_client and not self.gemini_client:
+            logger.warning("⚠️ Nenhuma chave de API configurada (GROQ_API_KEY ou GEMINI_API_KEY). Defina no arquivo .env.")
 
     def mine_transcription(self, text_content: str, title: str = "") -> Dict[str, Any]:
         """
-        Submete o texto da transcrição ao Gemini e retorna o dicionário JSON parsed.
+        Submete o texto da transcrição ao LLM (Groq ou Gemini) e retorna o JSON estruturado.
         """
         if not text_content or len(text_content.strip()) < 50:
             logger.warning("⚠️ Texto da transcrição curto demais para mineração.")
             return self._fallback_mining(title, text_content)
 
-        prompt_user = f"Título do Culto: {title}\n\nTexto Integral da Pregação:\n{text_content[:30000]}"
+        prompt_user = f"Título do Culto: {title}\n\nTexto Integral da Pregação:\n{text_content[:25000]}"
 
-        # 1. Chamada via SDK oficial google-genai
-        if self.client_genai:
+        # 1. Tenta a API do Groq (Llama 3.3 70B Versatile - Ultra Rápida & Gratuita)
+        if self.groq_client:
             try:
-                response = self.client_genai.models.generate_content(
+                logger.info(f"⚡ Enviando para a API Groq ({GROQ_MODEL_NAME})...")
+                chat_completion = self.groq_client.chat.completions.create(
+                    messages=[
+                        {"role": "system", "content": PROMPT_SYSTEM},
+                        {"role": "user", "content": prompt_user}
+                    ],
+                    model=GROQ_MODEL_NAME,
+                    response_format={"type": "json_object"},
+                    temperature=0.3
+                )
+                if chat_completion and chat_completion.choices:
+                    resp_text = chat_completion.choices[0].message.content
+                    parsed = self._clean_and_parse_json(resp_text)
+                    if parsed:
+                        logger.info("✅ Resposta recebida do Groq (Llama 3.3 70B) com sucesso!")
+                        return parsed
+            except Exception as e:
+                logger.warning(f"⚠️ Erro na chamada à API Groq: {e}")
+
+        # 2. Tenta a API do Google Gemini como fallback de IA
+        if self.gemini_client:
+            try:
+                logger.info(f"✅ Enviando para a API Gemini ({GEMINI_MODEL_NAME})...")
+                response = self.gemini_client.models.generate_content(
                     model=GEMINI_MODEL_NAME,
                     contents=[PROMPT_SYSTEM, prompt_user],
                     config=types.GenerateContentConfig(
@@ -127,16 +166,16 @@ class ContentMinerLLM:
                 if response and response.text:
                     parsed = self._clean_and_parse_json(response.text)
                     if parsed:
+                        logger.info("✅ Resposta recebida do Gemini com sucesso!")
                         return parsed
             except Exception as e:
-                logger.warning(f"⚠️ Erro na chamada ao Gemini via Client GenAI: {e}")
+                logger.warning(f"⚠️ Erro na chamada à API Gemini: {e}")
 
-        # 2. Fallback Heurístico Estruturado (quando sem API key ou em caso de oscilação)
+        # 3. Fallback Heurístico Estruturado
         logger.info("ℹ️ Utilizando minerador de fallback estruturado.")
         return self._fallback_mining(title, text_content)
 
     def _clean_and_parse_json(self, raw_text: str) -> Optional[Dict[str, Any]]:
-        """Extrai e limpa a resposta JSON retornada pelo modelo."""
         try:
             clean_str = re.sub(r'^```json\s*', '', raw_text.strip(), flags=re.IGNORECASE)
             clean_str = re.sub(r'```$', '', clean_str.strip()).strip()
@@ -150,7 +189,6 @@ class ContentMinerLLM:
         return None
 
     def _fallback_mining(self, title: str, text: str) -> Dict[str, Any]:
-        """Mineração heurística local caso a API não esteja acessível."""
         return {
             "01_tema_central": f"Mensagem edificante pregada na IBPM CR sobre o tema '{title or 'Culto de Celebração'}'. O preletor abordou princípios de fé, oração, vida espiritual e vitória em Cristo Jesus.",
             "02_frases_virais": [
@@ -194,4 +232,4 @@ class ContentMinerLLM:
 
 if __name__ == "__main__":
     miner = ContentMinerLLM()
-    print("ContentMinerLLM pronto e sem avisos de legado!")
+    print("ContentMinerLLM pronto para Groq API (Llama 3.3 70B)!")

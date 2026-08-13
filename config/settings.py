@@ -2,7 +2,7 @@
 Configurações Globais do IBPM CR Automation System (Fase 1, 2 e 3).
 
 Define caminhos de diretórios locais/nuvem, chaves de API e constantes para
-ingestão de áudio, transcrição por IA e mineração inteligente de conteúdo (Gemini).
+ingestão de áudio, transcrição por IA e mineração inteligente de conteúdo (Groq / Gemini LLM).
 """
 
 import os
@@ -42,7 +42,11 @@ YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "UCHhLxWRcCB-xKo0ifOQ8MVQ")
 YOUTUBE_CHANNEL_HANDLE = os.getenv("YOUTUBE_CHANNEL_HANDLE", "@ibpmcr7976")
 YOUTUBE_UPLOADS_PLAYLIST = "UUHhLxWRcCB-xKo0ifOQ8MVQ"
 
-# Parâmetros do Gemini LLM (Fase 3)
+# Parâmetros da API Groq (Llama 3.3 70B Open-Source)
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+
+# Parâmetros da API Gemini LLM (Opcional)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
 
