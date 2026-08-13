@@ -1,13 +1,13 @@
 """
-Módulo de Transcrição Sequencial em Lote por IA (Etapa 2 - IBPM CR).
+Módulo de Transcrição Sequencial de Alta Fidelidade (Etapa 2 - IBPM CR).
 
-Lê os arquivos de áudio baixados no HD local na pasta data/audio_podcasts/
-e transcreve a pregação na ordem cronológica (001, 002, 003...) via Faster-Whisper no CPU.
+Executa a transcrição integral palavra por palavra via Faster-Whisper
+no modelo de alta precisão (Large-v3 / Medium) com beam_size=5 e word_timestamps.
 
 Requisitos Atendidos:
-1. Gera e salva arquivos .txt e .json na MESMA PASTA do áudio (data/audio_podcasts/).
+1. Gera e salva arquivos .txt e .json na MESMA PASTA do áudio (data/audio_podcasts/ ou Drive).
 2. Sincroniza e grava a transcrição completa e os segmentos no SQLite local.
-3. Faster-Whisper CPU (device="cpu", compute_type="int8", model_size="base", language="pt").
+3. Transcrição Integral e Fiel (Strict Grounding Teológico).
 4. Idempotência e Resiliência.
 """
 
@@ -36,10 +36,10 @@ logger = logging.getLogger("TranscriberBatch")
 
 class BatchTranscriber:
     """
-    Transcritor sequencial em lote que gera .txt, .json e atualiza o SQLite.
+    Transcritor de alta precisão que gera .txt, .json e atualiza o SQLite.
     """
 
-    def __init__(self, model_size: str = WHISPER_MODEL_SIZE):
+    def __init__(self, model_size: str = "large-v3"):
         self.model_size = model_size
         self.device = WHISPER_DEVICE
         self.compute_type = WHISPER_COMPUTE_TYPE
@@ -50,31 +50,30 @@ class BatchTranscriber:
             try:
                 logger.info(f"⚡ Inicializando Faster-Whisper (Modelo: '{self.model_size}' | Device: '{self.device}' | Compute: '{self.compute_type}')...")
                 self.model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
-                logger.info(f"✅ Faster-Whisper carregado com sucesso.")
+                logger.info(f"✅ Faster-Whisper '{self.model_size}' de alta acurácia carregado com sucesso.")
             except Exception as e:
-                logger.warning(f"⚠️ Erro ao carregar Faster-Whisper: {e}")
+                logger.warning(f"⚠️ Erro ao carregar Faster-Whisper ({self.model_size}): {e}. Tentando modelo fallback 'medium'...")
+                try:
+                    self.model_size = "medium"
+                    self.model = WhisperModel("medium", device=self.device, compute_type=self.compute_type)
+                    logger.info("✅ Faster-Whisper 'medium' carregado com sucesso.")
+                except Exception as ex:
+                    logger.warning(f"⚠️ Erro ao carregar modelo fallback: {ex}")
 
     def process_pending_queue(self, max_items: int = 10, force: bool = False) -> int:
-        """
-        Lê a fila de cultos cadastrados no SQLite na ordem cronológica (001 a 447+),
-        transcreve os áudios locais e salva .txt e .json na pasta data/audio_podcasts/.
-        """
         all_videos = self.state_mgr.get_all_videos_chronological()
         
         processed = 0
         skipped = 0
 
-        # Filtra vídeos que possuem áudio no disco e ainda não foram transcritos (ou com force=True)
         pending_list = []
         for v in all_videos:
             v_id = v["video_id"]
             
-            # Localiza o arquivo de áudio no disco (MP3, M4A ou WEBM)
             audio_path = self._find_audio_file_on_disk(v_id)
             if not audio_path:
                 continue
 
-            # Checa se os arquivos de transcrição (.txt e .json) já existem no disco
             base_path = os.path.splitext(audio_path)[0]
             txt_path = base_path + ".txt"
             json_path = base_path + ".json"
@@ -93,14 +92,14 @@ class BatchTranscriber:
                 v["json_path_target"] = json_path
                 pending_list.append(v)
 
-        logger.info(f"📋 Fila de Transcrição: {len(pending_list)} cultos pendentes (Ignorados já concluídos: {skipped}).")
+        logger.info(f"📋 Fila de Transcrição Integral: {len(pending_list)} cultos pendentes (Ignorados já concluídos: {skipped}).")
 
         if not pending_list:
-            logger.info("🎉 Todos os cultos da fila já estão transcritos!")
+            logger.info("🎉 Todos os cultos da fila já possuem transcrição integral pronta!")
             return 0
 
         items_to_process = pending_list[:max_items]
-        pbar = tqdm(items_to_process, desc="Transcrevendo Cultos", unit="áudio")
+        pbar = tqdm(items_to_process, desc="Transcrevendo Cultos (Alta Precisão)", unit="áudio")
 
         for item in pbar:
             v_id = item["video_id"]
@@ -122,25 +121,21 @@ class BatchTranscriber:
         return processed
 
     def transcribe_single_audio(self, audio_path: str, video_id: str, item_meta: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Transcreve um arquivo de áudio individual, salva .txt e .json na pasta data/audio_podcasts/
-        e atualiza os registros no banco de dados SQLite.
-        """
         base_path = os.path.splitext(audio_path)[0]
         txt_path = base_path + ".txt"
         json_path = base_path + ".json"
 
-        # 1. Executa a transcrição via Faster-Whisper CPU
         if self.model and os.path.exists(audio_path) and os.path.getsize(audio_path) > 10000:
             size_mb = round(os.path.getsize(audio_path) / (1024 * 1024), 1)
             file_name = os.path.basename(audio_path)
-            logger.info(f"\n🎙️ Transcrevendo: {file_name} ({size_mb} MB) no CPU INT8...")
+            logger.info(f"\n🎙️ Transcrevendo com Alta Precisão ({self.model_size}): {file_name} ({size_mb} MB)...")
 
             segments, info = self.model.transcribe(
                 audio_path,
                 language="pt",
-                beam_size=2,
-                vad_filter=True
+                beam_size=5,
+                vad_filter=True,
+                word_timestamps=True
             )
 
             segments_data = []
@@ -159,22 +154,19 @@ class BatchTranscriber:
             full_text = " ".join(full_text_parts)
             segments_json_str = json.dumps(segments_data, ensure_ascii=False, indent=2)
 
-            # 2. Salva o arquivo de texto simples .txt na MESMA PASTA do áudio
             with open(txt_path, "w", encoding="utf-8") as f:
                 f.write(full_text)
-            logger.info(f"📄 Arquivo .txt salvo: {txt_path}")
+            logger.info(f"📄 Transcrição integral .txt salva: {txt_path}")
 
-            # 3. Salva o arquivo .json com timestamps na MESMA PASTA do áudio
             with open(json_path, "w", encoding="utf-8") as f:
                 f.write(segments_json_str)
-            logger.info(f"📊 Arquivo .json salvo: {json_path}")
+            logger.info(f"📊 Segmentos detalhados .json salvos: {json_path}")
 
-            # 4. Sincroniza e grava no banco de dados SQLite
             self.state_mgr.save_transcription_result(
                 video_id=video_id,
                 full_text=full_text,
                 segments_json=segments_json_str,
-                tipo_transcricao="whisper_cpu_int8"
+                tipo_transcricao=f"whisper_{self.model_size}_full_accuracy"
             )
             logger.info(f"💾 Transcrição sincronizada no SQLite para o vídeo {video_id}.")
 
@@ -192,7 +184,6 @@ class BatchTranscriber:
             return {}
 
     def _find_audio_file_on_disk(self, video_id: str) -> Optional[str]:
-        """Procura o arquivo de áudio físico (MP3, M4A, WEBM) no diretório data/audio_podcasts/."""
         if not os.path.exists(AUDIO_DIR):
             return None
 
@@ -206,4 +197,4 @@ class BatchTranscriber:
 
 if __name__ == "__main__":
     bt = BatchTranscriber()
-    print("TranscriberBatch inicializado e pronto!")
+    print("TranscriberBatch inicializado no modelo de alta acurácia!")

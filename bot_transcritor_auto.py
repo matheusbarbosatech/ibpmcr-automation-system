@@ -1,9 +1,10 @@
 """
-🤖 BOT DE AUTOMAÇÃO TOTAL E CONTINUA - IBPM CR AUTOMATION SYSTEM
+🤖 BOT DE AUTOMAÇÃO TOTAL DE ALTA ACCURACY - IBPM CR AUTOMATION SYSTEM
 
-Monitora continuamente a pasta de áudios, transcreve cada áudio novo/pendente
-usando Faster-Whisper CPU INT8 leve e dispara a mineração inteligente via Groq LLM (Llama 3.3 70B),
-atualizando o banco SQLite e a pasta do Google Drive sem precisar de nenhuma ação humana!
+Monitora continuamente a pasta de áudios (local ou no Google Drive),
+transcreve cada áudio com modelo TOPO DE LINHA de acurácia (Faster-Whisper Large-v3 / Medium com beam_size=5)
+e dispara a mineração inteligente via Groq LLM (Llama 3.3 70B),
+atualizando o banco SQLite e a pasta do Google Drive de forma 100% autônoma!
 """
 
 import sys
@@ -32,10 +33,10 @@ logger = logging.getLogger("BotTranscritorAuto")
 def print_banner():
     banner = f"""
 ===========================================================================
- 🤖 BOT DE AUTOMAÇÃO TOTAL - IBPM CR (TRANSCRIÇÃO + GROQ LLM)
+ 🤖 BOT DE AUTOMAÇÃO DE ALTA PRECISÃO - IBPM CR (LARGE-V3 + GROQ LLM)
    Modo: 100% Autônomo e Silencioso (Zero Intervenção Humana)
    Pasta de Monitoramento: {AUDIO_DIR}
-   Modelo de Transcrição: Faster-Whisper CPU INT8 Leve (~1.2 GB RAM)
+   Modelo de Transcrição: Faster-Whisper Large-v3 / Medium (Full Accuracy)
    Modelo de Inteligência: Groq Cloud API (Llama 3.3 70B Open-Source)
 ===========================================================================
     """
@@ -43,9 +44,9 @@ def print_banner():
 
 
 class IBPMAutomationBot:
-    def __init__(self):
+    def __init__(self, model_size: str = "large-v3"):
         self.state_mgr = MasterPlanManager()
-        self.transcriber = BatchTranscriber(model_size="base")
+        self.transcriber = BatchTranscriber(model_size=model_size)
         self.miner = ContentMinerLLM(groq_api_key=GROQ_API_KEY)
 
     def run_continuous_loop(self, poll_interval_sec: int = 15):
@@ -57,7 +58,6 @@ class IBPMAutomationBot:
                 processed_mining = self._step_mine_next()
 
                 if not processed_transcription and not processed_mining:
-                    # Nenhum trabalho pendente no momento, aguarda o próximo ciclo
                     time.sleep(poll_interval_sec)
 
             except KeyboardInterrupt:
@@ -68,7 +68,6 @@ class IBPMAutomationBot:
                 time.sleep(10)
 
     def _step_transcribe_next(self) -> bool:
-        """Localiza o próximo cultivo com áudio baixado e transcreve."""
         all_videos = self.state_mgr.get_all_videos_chronological()
         
         target = None
@@ -96,19 +95,17 @@ class IBPMAutomationBot:
         item, audio_path = target
         v_id = item["video_id"]
         idx = item.get("indice_sequencial", 1)
-        title = item.get("titulo_original", "")
 
-        logger.info(f"\n🎙️ [BOT] Transcrevendo Culto [{idx:03d}] (ID: {v_id}) em segundo plano...")
+        logger.info(f"\n🎙️ [BOT] Transcrevendo Culto [{idx:03d}] (ID: {v_id}) em Alta Precisão...")
         res = self.transcriber.transcribe_single_audio(audio_path, video_id=v_id, item_meta=item)
 
         if res and res.get("texto_completo"):
-            logger.info(f"✅ [BOT] Transcrição do Culto [{idx:03d}] concluída com sucesso! (.txt e .json gerados)")
+            logger.info(f"✅ [BOT] Transcrição integral do Culto [{idx:03d}] concluída com sucesso! (.txt e .json gerados)")
             return True
 
         return False
 
     def _step_mine_next(self) -> bool:
-        """Localiza o próximo cultivo transcrito e gera os insights via Groq LLM."""
         all_videos = self.state_mgr.get_all_videos_chronological()
         
         target = None
@@ -116,7 +113,6 @@ class IBPMAutomationBot:
             v_id = v["video_id"]
             idx = v.get("indice_sequencial", 1)
 
-            # Verifica se já possui transcrição (.txt)
             txt_file = None
             if os.path.exists(AUDIO_DIR):
                 for fname in os.listdir(AUDIO_DIR):
@@ -188,7 +184,7 @@ class IBPMAutomationBot:
 
 def main():
     print_banner()
-    bot = IBPMAutomationBot()
+    bot = IBPMAutomationBot(model_size="large-v3")
     bot.run_continuous_loop(poll_interval_sec=10)
 
 
