@@ -1,13 +1,13 @@
 """
 Script de Upload Resiliente e Monitorado para o Google Drive via Rclone (IBPM CR).
 
-Orquestra o upload automático e contínuo de 100% dos áudios, transcrições (.txt)
+Orquestra o upload automático e acelerado de 100% dos áudios, transcrições (.txt)
 e marcações temporais (.json) da pasta data/audio_podcasts/ para o Google Drive.
 
-Características:
-1. Protocolo Anti-Queda (Auto-Retry com rclone copy)
-2. Retomada Automática a partir do ponto de interrupção (Idempotente)
-3. Relatório de Checklist e Validação Pós-Upload
+Otimizações de Alta Velocidade para Google Drive:
+- --drive-chunk-size=32M (Aumenta o tamanho dos blocos de envio para máxima velocidade)
+- --transfers=4 (Subida de 4 arquivos simultâneos)
+- --buffer-size=16M (Buffer em memória RAM para fluxo contínuo)
 """
 
 import sys
@@ -33,17 +33,16 @@ logger = logging.getLogger("UploadMonitorado")
 def print_banner():
     banner = f"""
 ===========================================================================
- [IBPM CR] AUTOMATION SYSTEM - UPLOAD RESILIENTE PARA GOOGLE DRIVE
+ [IBPM CR] AUTOMATION SYSTEM - UPLOAD ALTA VELOCIDADE (GOOGLE DRIVE)
    Origem Local: {AUDIO_DIR}
-   Ferramenta: Rclone (Resiliência & Auto-Retry Anti-Queda)
-   Destino Padrão: meudrive:IBPM_CR_Cortes/audio_podcasts
+   Otimizações: --drive-chunk-size=32M | --transfers=4 | --buffer-size=16M
+   Destino: meudrive:IBPM_CR_Cortes/audio_podcasts
 ===========================================================================
     """
     print(banner)
 
 
 def check_rclone_installed() -> bool:
-    """Verifica se o Rclone está instalado e acessível no PATH do sistema."""
     try:
         res = subprocess.run(["rclone", "version"], capture_output=True, text=True)
         return res.returncode == 0
@@ -52,7 +51,6 @@ def check_rclone_installed() -> bool:
 
 
 def get_local_files_summary(audio_dir: Path):
-    """Conta os arquivos locais (.mp3, .m4a, .webm, .txt, .json)."""
     if not audio_dir.exists():
         return 0, 0, 0, 0
 
@@ -65,17 +63,17 @@ def get_local_files_summary(audio_dir: Path):
 
 
 def run_resilient_upload(remote_target: str, max_retries: int = 50, retry_delay: int = 10) -> bool:
-    """
-    Executa o Rclone em um loop de retry resiliente.
-    """
     source_path = str(AUDIO_DIR.resolve())
     
     cmd = [
         "rclone", "copy",
         source_path, remote_target,
         "--progress",
-        "--transfers=2",
-        "--checkers=4",
+        "--transfers=4",
+        "--checkers=8",
+        "--drive-chunk-size=32M",
+        "--drive-upload-cutoff=32M",
+        "--buffer-size=16M",
         "--retries=50",
         "--low-level-retries=20",
         "--stats=3s"
@@ -83,12 +81,11 @@ def run_resilient_upload(remote_target: str, max_retries: int = 50, retry_delay:
 
     attempt = 1
     while attempt <= max_retries:
-        logger.info(f"🚀 Iniciando Sincronização via Rclone (Tentativa {attempt}/{max_retries})...")
+        logger.info(f"🚀 Iniciando Sincronização em Alta Velocidade via Rclone (Tentativa {attempt}/{max_retries})...")
         logger.info(f"   Origem: {source_path}")
         logger.info(f"   Destino: {remote_target}\n")
 
         try:
-            # Executa o rclone transmitindo o progresso ao vivo no terminal
             process = subprocess.run(cmd)
 
             if process.returncode == 0:
@@ -100,11 +97,11 @@ def run_resilient_upload(remote_target: str, max_retries: int = 50, retry_delay:
             logger.info("\n🛑 Upload interrompido manualmente pelo usuário.")
             return False
         except Exception as e:
-            logger.warning(f"\n⚠️ Ocorreu uma oscilação ou erro na execução do Rclone: {e}")
+            logger.warning(f"\n⚠️ Ocorreu uma oscilação na transmissão: {e}")
 
         attempt += 1
         if attempt <= max_retries:
-            logger.info(f"🔄 Aguardando {retry_delay} segundos para reconectar e retomar o upload de onde parou...")
+            logger.info(f"🔄 Aguardando {retry_delay} segundos para reconectar e retomar a transmissão...")
             time.sleep(retry_delay)
 
     logger.error("❌ Excedido o limite máximo de tentativas de upload.")
@@ -112,7 +109,6 @@ def run_resilient_upload(remote_target: str, max_retries: int = 50, retry_delay:
 
 
 def verify_remote_checklist(remote_target: str):
-    """Executa checklist final comparando quantidade de arquivos locais e no Drive."""
     audio_cnt, txt_cnt, json_cnt, total_local = get_local_files_summary(AUDIO_DIR)
     
     print("\n" + "=" * 75)
@@ -124,15 +120,12 @@ def verify_remote_checklist(remote_target: str):
     print(f"   • Total de Arquivos Locais:        {total_local}")
     print("-" * 75)
 
-    # Consulta o tamanho/quantidade no Rclone Remote
     try:
         size_res = subprocess.run(["rclone", "size", remote_target], capture_output=True, text=True)
         if size_res.returncode == 0:
             print(" 📡 STATUS DO SERVIDOR NO GOOGLE DRIVE:")
             for line in size_res.stdout.strip().split("\n"):
                 print(f"   {line}")
-        else:
-            print(" ℹ️ Não foi possível consultar 'rclone size' diretamente, mas o Rclone finalizou a cópia.")
     except Exception as e:
         print(f" ℹ️ Validação via rclone size: {e}")
 
@@ -142,20 +135,15 @@ def verify_remote_checklist(remote_target: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Etapa 1/2 - Upload Resiliente e Monitorado para Google Drive via Rclone")
-    parser.add_argument("--remote", type=str, default="meudrive:IBPM_CR_Cortes/audio_podcasts", help="Remote e caminho de destino no Rclone (padrão: meudrive:IBPM_CR_Cortes/audio_podcasts)")
-    parser.add_argument("--retry-delay", type=int, default=10, help="Tempo de espera em segundos entre tentativas após queda de rede (padrão: 10)")
+    parser = argparse.ArgumentParser(description="Upload Resiliente em Alta Velocidade para Google Drive")
+    parser.add_argument("--remote", type=str, default="meudrive:IBPM_CR_Cortes/audio_podcasts", help="Remote no Rclone")
+    parser.add_argument("--retry-delay", type=int, default=10, help="Tempo de espera entre tentativas")
     args = parser.parse_args()
 
     print_banner()
 
     if not check_rclone_installed():
-        print("❌ ATENÇÃO: O Rclone não foi encontrado no PATH do seu sistema!")
-        print("\nPara instalar e configurar o Rclone no Windows:")
-        print(" 1. Baixe o Rclone em: https://rclone.org/downloads/ (ou rode `winget install Rclone.Rclone`)")
-        print(" 2. Configure a conexão com o Google Drive rodando: `rclone config`")
-        print(" 3. Nomeie a conexão como `meudrive`.")
-        print("\nApós concluir a configuração do Rclone, execute este script novamente.")
+        print("❌ Rclone não encontrado no PATH!")
         sys.exit(1)
 
     success = run_resilient_upload(remote_target=args.remote, retry_delay=args.retry_delay)
