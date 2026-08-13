@@ -1,9 +1,13 @@
 """
-Script Principal da FASE 3: Hub Inteligente de Mineração de Conteúdo (Com Sincronização Automática do Drive).
+Script Principal da FASE 3: Hub Inteligente de Mineração de Conteúdo (Gemini 1.5 Flash com Sincronização Rclone).
 
-Sincroniza os arquivos de transcrição (.txt e .json) do Google Drive (via Rclone ou pasta montada),
-envia para a API do Google Gemini 1.5 Flash (com Freio ABS de 4.5s / 15 RPM),
-anota os timestamps exatos dos cortes virais e salva os relatórios de insights!
+Sincroniza os arquivos de transcrição (.txt e .json) do Google Drive (meudrive:IBPM_CR_Cortes/audio_podcasts/transcricoes),
+envia o texto para a API do Google Gemini 1.5 Flash (com Freio ABS de 4.5s / 15 RPM),
+cruza o texto com os segmentos para anotar os timestamps exatos (start_sec e end_sec) dos cortes virais,
+salva os relatórios em .insights.json e os envia de volta para o Google Drive!
+
+Uso no Terminal Local:
+   python 3_mineracao_fase3.py
 """
 
 import sys
@@ -33,8 +37,8 @@ logger = logging.getLogger("Fase3_MineracaoConteudo")
 
 def sync_transcriptions_from_gdrive_rclone():
     """
-    Sincroniza os arquivos .txt e .json de transcrições do Google Drive (meudrive:IBPM_CR_Cortes/audio_podcasts/transcricoes)
-    para a pasta local de transcrições de forma super rápida.
+    Sincroniza as transcrições do Google Drive (meudrive:IBPM_CR_Cortes/audio_podcasts/transcricoes)
+    para a pasta local de transcrições com parâmetros otimizados.
     """
     target_local = TRANSCRICOES_DIR
     target_local.mkdir(parents=True, exist_ok=True)
@@ -43,11 +47,15 @@ def sync_transcriptions_from_gdrive_rclone():
     logger.info(f"🔄 Sincronizando transcrições do Google Drive ({remote_path}) via Rclone...")
 
     try:
-        cmd = ["rclone", "copy", remote_path, str(target_local), "--include", "*.txt", "--include", "*.json", "-q"]
-        subprocess.run(cmd, check=True, timeout=30)
+        cmd = [
+            "rclone", "copy", remote_path, str(target_local),
+            "--drive-chunk-size=32M", "--transfers=4", "--fast-list",
+            "--exclude", "*.partial"
+        ]
+        subprocess.run(cmd, check=True, timeout=120)
         logger.info("✅ Transcrições sincronizadas do Google Drive com sucesso!")
     except Exception as e:
-        logger.warning(f"⚠️ Não foi possível sincronizar via Rclone: {e}. Verifique a conexão ou caminho do Drive.")
+        logger.warning(f"⚠️ Aviso na sincronização Rclone: {e}. Prosseguindo com os arquivos disponíveis.")
 
 
 def sync_insights_to_gdrive_rclone():
@@ -59,11 +67,15 @@ def sync_insights_to_gdrive_rclone():
 
     if local_insights.exists() and len(os.listdir(local_insights)) > 0:
         try:
-            cmd = ["rclone", "copy", str(local_insights), remote_insights, "--include", "*.insights.json", "-q"]
-            subprocess.run(cmd, check=True, timeout=30)
+            cmd = [
+                "rclone", "copy", str(local_insights), remote_insights,
+                "--drive-chunk-size=32M", "--transfers=4", "--fast-list",
+                "--include", "*.insights.json"
+            ]
+            subprocess.run(cmd, check=True, timeout=120)
             logger.info(f"☁️ Relatórios de insights sincronizados para o Google Drive ({remote_insights}).")
         except Exception as e:
-            logger.warning(f"⚠️ Erro ao enviar insights para o Drive via Rclone: {e}")
+            logger.warning(f"⚠️ Aviso ao enviar insights para o Drive via Rclone: {e}")
 
 
 def print_banner(watch_mode: bool = False):
@@ -83,16 +95,16 @@ def print_banner(watch_mode: bool = False):
 
 
 def process_pending_batch(state_mgr: MasterPlanManager, miner: ContentMinerLLM, max_items: int = 50, force: bool = False) -> int:
-    # 1. Tenta puxar arquivos novos do Google Drive via Rclone se o drive local G: não estiver montado diretamente
+    # 1. Busca transcrições novas no Google Drive via Rclone
     if not USE_GDRIVE:
         sync_transcriptions_from_gdrive_rclone()
 
     txt_files = []
     if TRANSCRICOES_DIR.exists():
-        txt_files = sorted([f for f in TRANSCRICOES_DIR.glob("*.txt") if f.stat().st_size > 100])
+        txt_files = sorted([f for f in TRANSCRICOES_DIR.glob("*.txt") if f.stat().st_size > 100 and not f.name.endswith(".partial")])
     
     if not txt_files and AUDIO_DIR.exists():
-        txt_files = sorted([f for f in AUDIO_DIR.glob("*.txt") if f.stat().st_size > 100])
+        txt_files = sorted([f for f in AUDIO_DIR.glob("*.txt") if f.stat().st_size > 100 and not f.name.endswith(".partial")])
 
     pending_list = []
     skipped = 0
@@ -125,7 +137,7 @@ def process_pending_batch(state_mgr: MasterPlanManager, miner: ContentMinerLLM, 
         display_name = f"{stem[:30]}"
         pbar.set_postfix_str(display_name)
 
-        # Reads .txt
+        # 1. Lê o texto integral (.txt)
         text_content = ""
         try:
             with open(txt_path, "r", encoding="utf-8") as f:
@@ -134,7 +146,7 @@ def process_pending_batch(state_mgr: MasterPlanManager, miner: ContentMinerLLM, 
             logger.warning(f"⚠️ Erro ao ler arquivo .txt {txt_path}: {e}")
             continue
 
-        # Reads .json timestamps
+        # 2. Lê os segmentos com timestamps (.json) se existir
         segments_data = None
         if json_path.exists() and json_path.stat().st_size > 50:
             try:
