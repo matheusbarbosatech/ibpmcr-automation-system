@@ -1,20 +1,16 @@
 """
-Script Principal da FASE 3: Hub Inteligente de Mineração de Conteúdo (Gemini 1.5 Flash com Monitoramento Contínuo).
+Script Principal da FASE 3: Hub Inteligente de Mineração de Conteúdo (Com Sincronização Automática do Drive).
 
-Monitora continuamente a pasta de transcrições (G:\\Meu Drive\\IBPM_CR_Cortes\\audio_podcasts\\transcricoes\\).
-Assim que o Google Colab conclui a transcrição de um culto (gerando .txt e .json), este script detecta automaticamente,
-envia para o Gemini 1.5 Flash (com Freio ABS de 4.5s), anota os timestamps exatos dos cortes virais,
-e salva os relatórios em audio_podcasts/conteudos_fase3/ e no SQLite de forma 100% autônoma!
-
-Uso no Terminal Local:
-   python 3_mineracao_fase3.py --watch
-   (ou sem --watch para rodar um lote único)
+Sincroniza os arquivos de transcrição (.txt e .json) do Google Drive (via Rclone ou pasta montada),
+envia para a API do Google Gemini 1.5 Flash (com Freio ABS de 4.5s / 15 RPM),
+anota os timestamps exatos dos cortes virais e salva os relatórios de insights!
 """
 
 import sys
 import os
 import time
 import json
+import subprocess
 import argparse
 import logging
 from pathlib import Path
@@ -27,12 +23,47 @@ if hasattr(sys.stderr, 'reconfigure'):
 
 sys.path.append(str(Path(__file__).resolve().parent))
 
-from config.settings import AUDIO_DIR, TRANSCRICOES_DIR, INSIGHTS_DIR, DB_PATH, GEMINI_API_KEY, GROQ_API_KEY
+from config.settings import AUDIO_DIR, TRANSCRICOES_DIR, INSIGHTS_DIR, DB_PATH, GEMINI_API_KEY, GROQ_API_KEY, USE_GDRIVE
 from src.core.state_manager import MasterPlanManager
 from src.discovery.content_miner_llm import ContentMinerLLM
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("Fase3_MineracaoConteudo")
+
+
+def sync_transcriptions_from_gdrive_rclone():
+    """
+    Sincroniza os arquivos .txt e .json de transcrições do Google Drive (meudrive:IBPM_CR_Cortes/audio_podcasts/transcricoes)
+    para a pasta local de transcrições de forma super rápida.
+    """
+    target_local = TRANSCRICOES_DIR
+    target_local.mkdir(parents=True, exist_ok=True)
+
+    remote_path = "meudrive:IBPM_CR_Cortes/audio_podcasts/transcricoes"
+    logger.info(f"🔄 Sincronizando transcrições do Google Drive ({remote_path}) via Rclone...")
+
+    try:
+        cmd = ["rclone", "copy", remote_path, str(target_local), "--include", "*.txt", "--include", "*.json", "-q"]
+        subprocess.run(cmd, check=True, timeout=30)
+        logger.info("✅ Transcrições sincronizadas do Google Drive com sucesso!")
+    except Exception as e:
+        logger.warning(f"⚠️ Não foi possível sincronizar via Rclone: {e}. Verifique a conexão ou caminho do Drive.")
+
+
+def sync_insights_to_gdrive_rclone():
+    """
+    Envia os relatórios minerados (.insights.json) para a subpasta conteudos_fase3/ no Google Drive.
+    """
+    local_insights = INSIGHTS_DIR
+    remote_insights = "meudrive:IBPM_CR_Cortes/audio_podcasts/conteudos_fase3"
+
+    if local_insights.exists() and len(os.listdir(local_insights)) > 0:
+        try:
+            cmd = ["rclone", "copy", str(local_insights), remote_insights, "--include", "*.insights.json", "-q"]
+            subprocess.run(cmd, check=True, timeout=30)
+            logger.info(f"☁️ Relatórios de insights sincronizados para o Google Drive ({remote_insights}).")
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao enviar insights para o Drive via Rclone: {e}")
 
 
 def print_banner(watch_mode: bool = False):
@@ -52,6 +83,10 @@ def print_banner(watch_mode: bool = False):
 
 
 def process_pending_batch(state_mgr: MasterPlanManager, miner: ContentMinerLLM, max_items: int = 50, force: bool = False) -> int:
+    # 1. Tenta puxar arquivos novos do Google Drive via Rclone se o drive local G: não estiver montado diretamente
+    if not USE_GDRIVE:
+        sync_transcriptions_from_gdrive_rclone()
+
     txt_files = []
     if TRANSCRICOES_DIR.exists():
         txt_files = sorted([f for f in TRANSCRICOES_DIR.glob("*.txt") if f.stat().st_size > 100])
@@ -90,7 +125,7 @@ def process_pending_batch(state_mgr: MasterPlanManager, miner: ContentMinerLLM, 
         display_name = f"{stem[:30]}"
         pbar.set_postfix_str(display_name)
 
-        # 1. Lê o texto integral (.txt)
+        # Reads .txt
         text_content = ""
         try:
             with open(txt_path, "r", encoding="utf-8") as f:
@@ -99,7 +134,7 @@ def process_pending_batch(state_mgr: MasterPlanManager, miner: ContentMinerLLM, 
             logger.warning(f"⚠️ Erro ao ler arquivo .txt {txt_path}: {e}")
             continue
 
-        # 2. Lê os segmentos com timestamps (.json) se existir
+        # Reads .json timestamps
         segments_data = None
         if json_path.exists() and json_path.stat().st_size > 50:
             try:
@@ -134,11 +169,15 @@ def process_pending_batch(state_mgr: MasterPlanManager, miner: ContentMinerLLM, 
 
             processed_count += 1
 
+    # Sincroniza os relatórios salvos de volta para o Google Drive via Rclone
+    if not USE_GDRIVE and processed_count > 0:
+        sync_insights_to_gdrive_rclone()
+
     return processed_count
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fase 3 - Mineração de Conteúdo via Gemini 1.5 Flash API com Monitoramento Contínuo")
+    parser = argparse.ArgumentParser(description="Fase 3 - Mineração de Conteúdo via Gemini 1.5 Flash API com Sincronização do Google Drive")
     parser.add_argument("--batch-size", type=int, default=50, help="Quantidade de cultos a minerar por lote (padrão: 50)")
     parser.add_argument("--watch", action="store_true", help="Manter o script monitorando continuamente a pasta de transcrições do Drive")
     parser.add_argument("--force", action="store_true", help="Forçar re-mineração mesmo se o relatório já existir")
@@ -149,8 +188,7 @@ def main():
     state_mgr = MasterPlanManager()
     miner = ContentMinerLLM(gemini_api_key=GEMINI_API_KEY, groq_api_key=GROQ_API_KEY)
 
-    # Execução em loop de monitoramento contínuo
-    logger.info("👀 Bot da Fase 3 Iniciado! Monitorando a pasta de transcrições do Google Drive...\n")
+    logger.info("👀 Bot da Fase 3 Iniciado! Sincronizando com o Google Drive e monitorando...\n")
 
     while True:
         try:
