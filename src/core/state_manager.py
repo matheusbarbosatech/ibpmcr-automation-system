@@ -1,8 +1,8 @@
 """
-Gerenciador de Estado do Banco de Dados SQLite Relacional (Etapa 1 & 2 - IBPM CR).
+Gerenciador de Estado do Banco de Dados SQLite Relacional (Etapa 1, 2 e 3 - IBPM CR).
 
 Gerencia o inventário relacional de vídeos, salvando o índice sequencial (001 a 447+),
-a nomenclatura sanitizada dos arquivos, status de download de áudio e transcrição.
+status de download, transcrições e o acervo de insights minerados pela IA (Fase 3).
 """
 
 import os
@@ -24,10 +24,6 @@ logger = logging.getLogger("StateManager")
 
 
 def sanitize_title(title: str) -> str:
-    """
-    Sanitiza o título do vídeo para uso em nomes de arquivo seguros no SO:
-    Remove acentos, caracteres especiais e espaços excessivos, mantendo apenas a-z, 0-9 e underline.
-    """
     if not title:
         return "culto_ibpmcr"
     
@@ -57,6 +53,7 @@ class MasterPlanManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
+            # Tabela Master de Vídeos
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS videos (
                 video_id TEXT PRIMARY KEY,
@@ -78,39 +75,32 @@ class MasterPlanManager:
                 segmentos_json TEXT,
                 tipo_transcricao TEXT DEFAULT 'pendente',
                 analisado_pln INTEGER DEFAULT 0,
-                pregador TEXT,
-                estilo_homiletico TEXT,
-                serie_campanha TEXT,
-                referencias_biblicas TEXT,
-                proporcao_at_nt TEXT,
-                score_viral INTEGER DEFAULT 0,
-                insights_json TEXT,
                 created_at TEXT,
                 updated_at TEXT
             )
             """)
 
-            for col_def in [
-                ("indice_sequencial", "INTEGER"),
-                ("nome_arquivo_mp3", "TEXT"),
-                ("titulo_sanitizado", "TEXT"),
-                ("audio_baixado", "INTEGER DEFAULT 0"),
-                ("caminho_audio", "TEXT"),
-                ("transcrito", "INTEGER DEFAULT 0"),
-                ("texto_transcrito", "TEXT"),
-                ("segmentos_json", "TEXT"),
-                ("tipo_transcricao", "TEXT DEFAULT 'pendente'"),
-                ("analisado_pln", "INTEGER DEFAULT 0")
-            ]:
-                try:
-                    cursor.execute(f"ALTER TABLE videos ADD COLUMN {col_def[0]} {col_def[1]};")
-                except Exception:
-                    pass
+            # Tabela da Fase 3: Acervo de Insights Minerados
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS acervo_insights (
+                video_id TEXT PRIMARY KEY,
+                indice_sequencial INTEGER,
+                titulo_original TEXT,
+                tema_central TEXT,
+                frases_virais TEXT,
+                passagens_biblicas TEXT,
+                ideia_carrossel_instagram TEXT,
+                cortes_virais TEXT,
+                prompt_thumbnail TEXT,
+                raw_json_response TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+            """)
 
             conn.commit()
 
     def save_video_metadata(self, metadata: Dict[str, Any]) -> None:
-        """Salva ou atualiza os metadados do vídeo com índice sequencial e nome de arquivo MP3."""
         v_id = metadata["video_id"]
         idx = metadata.get("indice_sequencial", 0)
         now_str = datetime.now(timezone.utc).isoformat()
@@ -141,51 +131,77 @@ class MasterPlanManager:
                 url=excluded.url,
                 updated_at=excluded.updated_at
             """, (
-                v_id,
-                idx,
-                filename_mp3,
-                metadata.get("titulo_original", ""),
-                clean_title,
-                metadata.get("data_publicacao", ""),
-                metadata.get("duracao_segundos", 0),
-                metadata.get("visualizacoes", 0),
-                metadata.get("likes", 0),
-                metadata.get("quantidade_comentarios", 0),
-                metadata.get("descricao", ""),
+                v_id, idx, filename_mp3, metadata.get("titulo_original", ""), clean_title,
+                metadata.get("data_publicacao", ""), metadata.get("duracao_segundos", 0),
+                metadata.get("visualizacoes", 0), metadata.get("likes", 0),
+                metadata.get("quantidade_comentarios", 0), metadata.get("descricao", ""),
                 metadata.get("url", f"https://www.youtube.com/watch?v={v_id}"),
-                now_str,
-                now_str
+                now_str, now_str
             ))
             conn.commit()
 
     def mark_audio_downloaded(self, video_id: str, audio_path: str) -> None:
-        """Marca o áudio como baixado no SQLite e grava o caminho completo do arquivo."""
         now_str = datetime.now(timezone.utc).isoformat()
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-            UPDATE videos SET audio_baixado = 1, caminho_audio = ?, updated_at = ? WHERE video_id = ?
-            """, (audio_path, now_str, video_id))
+            cursor.execute("UPDATE videos SET audio_baixado = 1, caminho_audio = ?, updated_at = ? WHERE video_id = ?", (audio_path, now_str, video_id))
             conn.commit()
 
     def save_transcription_result(self, video_id: str, full_text: str, segments_json: str, tipo_transcricao: str = "concluida") -> None:
-        """Grava a transcrição e os segmentos com timestamps no SQLite e marca transcrito = 1."""
         now_str = datetime.now(timezone.utc).isoformat()
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-            UPDATE videos SET
-                transcrito = 1,
-                texto_transcrito = ?,
-                segmentos_json = ?,
-                tipo_transcricao = ?,
-                updated_at = ?
-            WHERE video_id = ?
+            UPDATE videos SET transcrito = 1, texto_transcrito = ?, segmentos_json = ?, tipo_transcricao = ?, updated_at = ? WHERE video_id = ?
             """, (full_text, segments_json, tipo_transcricao, now_str, video_id))
             conn.commit()
 
+    def save_insights_fase3(self, video_id: str, idx: int, title: str, insights_dict: Dict[str, Any], raw_json: str) -> None:
+        """Salva os insights estruturados extraídos pelo LLM na tabela acervo_insights."""
+        now_str = datetime.now(timezone.utc).isoformat()
+        
+        tema = str(insights_dict.get("01_tema_central", ""))
+        frases = json.dumps(insights_dict.get("02_frases_virais", []), ensure_ascii=False)
+        passagens = json.dumps(insights_dict.get("03_passagens_biblicas", []), ensure_ascii=False)
+        carrossel = json.dumps(insights_dict.get("04_ideia_carrossel_instagram", []), ensure_ascii=False)
+        cortes = json.dumps(insights_dict.get("05_cortes_virais", []), ensure_ascii=False)
+        prompt_thumb = str(insights_dict.get("06_prompt_thumbnail", ""))
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+            INSERT INTO acervo_insights (
+                video_id, indice_sequencial, titulo_original, tema_central,
+                frases_virais, passagens_biblicas, ideia_carrossel_instagram,
+                cortes_virais, prompt_thumbnail, raw_json_response, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(video_id) DO UPDATE SET
+                indice_sequencial=excluded.indice_sequencial,
+                titulo_original=excluded.titulo_original,
+                tema_central=excluded.tema_central,
+                frases_virais=excluded.frases_virais,
+                passagens_biblicas=excluded.passagens_biblicas,
+                ideia_carrossel_instagram=excluded.ideia_carrossel_instagram,
+                cortes_virais=excluded.cortes_virais,
+                prompt_thumbnail=excluded.prompt_thumbnail,
+                raw_json_response=excluded.raw_json_response,
+                updated_at=excluded.updated_at
+            """, (
+                video_id, idx, title, tema, frases, passagens, carrossel, cortes, prompt_thumb, raw_json, now_str, now_str
+            ))
+            
+            # Marca analisado_pln = 1 na tabela videos
+            cursor.execute("UPDATE videos SET analisado_pln = 1, updated_at = ? WHERE video_id = ?", (now_str, video_id))
+            conn.commit()
+
+    def is_insight_processed(self, video_id: str) -> bool:
+        """Verifica se o vídeo já possui relatório na tabela acervo_insights."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT video_id FROM acervo_insights WHERE video_id = ?", (video_id,))
+            return cursor.fetchone() is not None
+
     def is_transcribed(self, video_id: str) -> bool:
-        """Verifica no SQLite se o vídeo já foi transcrito."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT transcrito, texto_transcrito FROM videos WHERE video_id = ?", (video_id,))
@@ -193,27 +209,16 @@ class MasterPlanManager:
             return bool(row and row["transcrito"] == 1 and row["texto_transcrito"] and len(row["texto_transcrito"].strip()) > 50)
 
     def is_audio_downloaded(self, video_id: str) -> bool:
-        """Checa no SQLite e no sistema de arquivos se o áudio já foi baixado (Idempotência)."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT audio_baixado, caminho_audio FROM videos WHERE video_id = ?", (video_id,))
             row = cursor.fetchone()
-
             if row and row["audio_baixado"] == 1 and row["caminho_audio"]:
                 if os.path.exists(row["caminho_audio"]) and os.path.getsize(row["caminho_audio"]) > 10000:
                     return True
-
-        if os.path.exists(AUDIO_DIR):
-            for fname in os.listdir(AUDIO_DIR):
-                if video_id in fname and not fname.endswith(".txt") and not fname.endswith(".json"):
-                    full_p = os.path.join(AUDIO_DIR, fname)
-                    if os.path.getsize(full_p) > 10000:
-                        self.mark_audio_downloaded(video_id, full_p)
-                        return True
         return False
 
     def get_all_videos_chronological(self) -> List[Dict[str, Any]]:
-        """Retorna todos os vídeos cadastrados ordenados por indice_sequencial."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM videos ORDER BY indice_sequencial ASC")
@@ -222,4 +227,4 @@ class MasterPlanManager:
 
 if __name__ == "__main__":
     mgr = MasterPlanManager()
-    print("MasterPlanManager atualizado com suporte completo à Etapa 2!")
+    print("MasterPlanManager atualizado com a tabela acervo_insights da Fase 3!")

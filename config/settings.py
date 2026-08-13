@@ -1,8 +1,8 @@
 """
-Configurações Globais do IBPM CR Automation System (Fase 1 - Etapa 1 & 2).
+Configurações Globais do IBPM CR Automation System (Fase 1, 2 e 3).
 
-Define caminhos de diretórios locais, chaves de API e constantes para o download
-organizado e a transcrição sequencial por IA dos cultos do canal @ibpmcr7976.
+Define caminhos de diretórios locais/nuvem, chaves de API e constantes para
+ingestão de áudio, transcrição por IA e mineração inteligente de conteúdo (Gemini).
 """
 
 import os
@@ -13,15 +13,20 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-# Diretórios Principais
+# Verificação de sincronização com Google Drive (G:\Meu Drive\IBPM_CR_Cortes)
+GDRIVE_BASE = Path(r"G:\Meu Drive\IBPM_CR_Cortes")
+USE_GDRIVE = GDRIVE_BASE.exists()
+
+# Diretórios Principais (Com fallback transparente local <-> Google Drive)
 DATA_DIR = BASE_DIR / "data"
-DB_DIR = DATA_DIR / "db"
+DB_DIR = GDRIVE_BASE if USE_GDRIVE else (DATA_DIR / "db")
 JSON_EXPORT_DIR = DATA_DIR / "json"
-AUDIO_DIR = DATA_DIR / "audio_podcasts"
+AUDIO_DIR = GDRIVE_BASE / "audio_podcasts" if (USE_GDRIVE and (GDRIVE_BASE / "audio_podcasts").exists()) else (DATA_DIR / "audio_podcasts")
+INSIGHTS_DIR = GDRIVE_BASE / "insights_fase3" if USE_GDRIVE else (DATA_DIR / "insights_fase3")
 REPORT_DIR = BASE_DIR / "reports"
 
 # Garante que os diretórios existam
-for path in [DATA_DIR, DB_DIR, JSON_EXPORT_DIR, AUDIO_DIR, REPORT_DIR]:
+for path in [DATA_DIR, DB_DIR, JSON_EXPORT_DIR, AUDIO_DIR, INSIGHTS_DIR, REPORT_DIR]:
     path.mkdir(parents=True, exist_ok=True)
 
 # Caminhos de Arquivos de Persistência
@@ -36,6 +41,10 @@ YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "UCHhLxWRcCB-xKo0ifOQ8MVQ")
 YOUTUBE_CHANNEL_HANDLE = os.getenv("YOUTUBE_CHANNEL_HANDLE", "@ibpmcr7976")
 YOUTUBE_UPLOADS_PLAYLIST = "UUHhLxWRcCB-xKo0ifOQ8MVQ"
+
+# Parâmetros do Gemini LLM (Fase 3)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
 
 # Parâmetros de Áudio (MP3 Leve mono a 64kbps 16kHz)
 AUDIO_BITRATE = "64k"
