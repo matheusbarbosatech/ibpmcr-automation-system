@@ -1,3 +1,6 @@
+# Ignorar variáveis de ambiente com segredos
+.env
+
 # Ignorar ambientes virtuais
 venv/
 .venv/
