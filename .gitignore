@@ -1,27 +1,43 @@
-# Ignorar variáveis de ambiente com segredos
+# Environment variables
 .env
+.env.*
+!.env.example
 
-# Ignorar ambientes virtuais
-venv/
-.venv/
-env/
-
-# Ignorar banco de dados local e áudios
-data/audio_podcasts/*.mp3
-data/audio_podcasts/*.m4a
-data/audio_podcasts/*.webm
-data/db/*.db
-data/db/*.db-journal
-data/json/*.json
-
-# Ignorar relatórios gerados
-reports/*.pdf
-reports/*.html
-
-# Ignorar arquivos temporários, logs e cookies de sessão pessoal
-cookies.txt
-*.log
-*.tmp
+# Python
 __pycache__/
-*.pyc
-.DS_Store
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Data & Cache
+data/audio_podcasts/*
+data/cache/*
+!data/audio_podcasts/.gitkeep
+!data/cache/.gitkeep
+
+# Credentials
+credentials/*.json
+credentials/*.pickle
+
+# IDE
+.vscode/
+.idea/

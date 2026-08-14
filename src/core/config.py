@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str = Field(default="", description="Chave da API do Google Cloud")
     GEMINI_API_KEY: str = Field(default="", description="Chave da API do Google Gemini AI Studio")
     GOOGLE_GEMINI_MODEL: str = Field(default="gemini-flash-latest", description="Modelo padrão do Gemini")
+    GROQ_API_KEY: str = Field(default="", description="Chave da API Groq Cloud (Whisper Large V3)")
     
     YOUTUBE_API_KEY: str = Field(default="", description="Chave pública da API do YouTube Data v3")
     YOUTUBE_CHANNEL_ID: str = Field(default="UCHhLxWRcCB-xKo0ifOQ8MVQ", description="ID do canal oficial IBPM CR")
