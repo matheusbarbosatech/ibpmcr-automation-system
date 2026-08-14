@@ -1,13 +1,13 @@
 """
-Bot de Monitoramento Contínuo e Ingestão do YouTube - IBPM CR.
+Bot de Monitoramento Diário e Ingestão do YouTube - IBPM CR.
 
-Monitora o canal @ibpmcr7976 continuamente (a cada 15 minutos ou no intervalo configurado),
+Monitora o canal @ibpmcr7976 1 vez por dia (intervalo padrão de 24 horas / 86400s),
 detectando automaticamente novos cultos, festividades e transmissões ao vivo.
 Baixa os áudios MP3 leves e os sincroniza imediatamente com o Google Drive via Rclone!
 
 Uso no Terminal:
     python bot_monitor_youtube.py
-    python bot_monitor_youtube.py --interval 600 (para checar a cada 10 minutos)
+    python bot_monitor_youtube.py --interval 86400 (1 vez por dia)
 """
 
 import sys
@@ -36,12 +36,12 @@ logger = logging.getLogger("BotMonitorYouTube")
 
 
 def print_banner(interval_sec: int):
-    minutos = interval_sec // 60
+    horas = interval_sec // 3600
     banner = f"""
 ===========================================================================
- 🤖 [IBPM CR] BOT MONITOR DE CULTOS & FESTIVIDADES NO YOUTUBE
+ 🤖 [IBPM CR] BOT MONITOR DIÁRIO DE CULTOS & FESTIVIDADES NO YOUTUBE
    Canal Monitorado:   @ibpmcr7976 (IBPM CR)
-   Intervalo de Checagem: A cada {minutos} minutos ({interval_sec}s)
+   Frequência:         1 VEZ POR DIA ({horas} horas / {interval_sec}s)
    Destino MP3 Local:  {AUDIO_DIR}
    Sincronização Cloud: Auto Rclone -> meudrive:IBPM_CR_Cortes/audio_podcasts
 ===========================================================================
@@ -50,7 +50,7 @@ def print_banner(interval_sec: int):
 
 
 def check_and_ingest_new_sermons(sweeper: ChannelSweeper, state_mgr: MasterPlanManager, limit: int = 600) -> int:
-    logger.info("📡 Varrendo canal do YouTube (@ibpmcr7976) em busca de novos cultos/festividades...")
+    logger.info("📡 Varrendo canal do YouTube (@ibpmcr7976) em busca de novos cultos/festividades do dia...")
     catalog = sweeper.sweep_and_index_channel(limit=limit)
 
     if not catalog:
@@ -69,7 +69,7 @@ def check_and_ingest_new_sermons(sweeper: ChannelSweeper, state_mgr: MasterPlanM
         if state_mgr.is_audio_downloaded(v_id):
             continue
 
-        logger.info(f"\n🎉 NOVO CULTO ENCONTRADO! [{idx:03d}] {date_str} - {title}")
+        logger.info(f"\n🎉 NOVO CULTO DETECTADO! [{idx:03d}] {date_str} - {title}")
         logger.info(f"📥 Baixando áudio MP3 leve para {v_id}...")
 
         try:
@@ -84,15 +84,15 @@ def check_and_ingest_new_sermons(sweeper: ChannelSweeper, state_mgr: MasterPlanM
         logger.info(f"\n🚀 {new_downloads_count} novo(s) culto(s) baixado(s)! Disparando sincronização Rclone para o Google Drive...")
         run_resilient_upload("meudrive:IBPM_CR_Cortes/audio_podcasts")
     else:
-        logger.info("✨ Pasta de áudios local e Google Drive já estão 100% atualizados!")
+        logger.info("✨ Pasta de áudios local e Google Drive já estão 100% atualizados para o dia de hoje!")
 
     return new_downloads_count
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Bot Monitor de Cultos e Festividades no YouTube (IBPM CR)")
-    parser.add_argument("--interval", type=int, default=900, help="Intervalo de checagem em segundos (padrão: 900s / 15 min)")
-    parser.add_argument("--single-run", action="store_true", help="Executar apenas uma checagem e encerrar")
+    parser = argparse.ArgumentParser(description="Bot Monitor Diário de Cultos e Festividades no YouTube (IBPM CR)")
+    parser.add_argument("--interval", type=int, default=86400, help="Intervalo de checagem em segundos (padrão: 86400s / 1 vez por dia)")
+    parser.add_argument("--single-run", action="store_true", help="Executar apenas uma checagem diária e encerrar")
     args = parser.parse_args()
 
     print_banner(interval_sec=args.interval)
@@ -100,26 +100,26 @@ def main():
     state_mgr = MasterPlanManager()
     sweeper = ChannelSweeper()
 
-    logger.info("👀 Bot da Fase 1 Iniciado! Monitorando o YouTube continuamente...\n")
+    logger.info("👀 Bot da Fase 1 Iniciado! Monitorando o YouTube diariamente...\n")
 
     cycle_count = 1
 
     while True:
         try:
-            logger.info(f"🔄 --- Ciclo de Monitoramento #{cycle_count} ---")
+            logger.info(f"🔄 --- Ciclo de Checagem Diária #{cycle_count} ---")
             new_files = check_and_ingest_new_sermons(sweeper, state_mgr)
 
             if args.single_run:
-                logger.info("✅ Varredura única concluída.")
+                logger.info("✅ Varredura diária única concluída.")
                 break
 
-            minutos = args.interval // 60
-            logger.info(f"😴 Monitorando... Próxima varredura automática no YouTube em {minutos} minutos ({args.interval}s).\n")
+            horas = args.interval // 3600
+            logger.info(f"😴 Monitorando... Próxima varredura diária automática no YouTube em {horas} horas ({args.interval}s).\n")
             time.sleep(args.interval)
             cycle_count += 1
 
         except KeyboardInterrupt:
-            logger.info("\n🛑 Monitoramento do YouTube encerrado pelo usuário.")
+            logger.info("\n🛑 Monitoramento diário do YouTube encerrado pelo usuário.")
             break
         except Exception as e:
             logger.warning(f"⚠️ Ocorreu um erro no ciclo de monitoramento: {e}. Reiniciando ciclo em 60s...")
