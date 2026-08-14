@@ -2,7 +2,7 @@
 IBPM CR AUTOMATION STUDIO PRO - FLET (FLUTTER ENGINE FOR PYTHON).
 
 Interface Desktop / Web Nativa de Alta Fidelidade Visual estilo DaVinci Resolve / CapCut Pro
-desenvolvida em Flet (Flutter).
+desenvolvida em Flet (Flutter) compatível com Flet v0.86+.
 
 Execução no Terminal:
     python app_flet.py
@@ -60,7 +60,7 @@ def main(page: ft.Page):
             controls=[
                 ft.Row(
                     controls=[
-                        ft.Icon(name=ft.Icons.MOVIE_OUTLINED, color="#F59E0B", size=30),
+                        ft.Icon(ft.Icons.MOVIE_OUTLINED, color="#F59E0B", size=30),
                         ft.Text("IBPM CR STUDIO PRO", size=20, weight=ft.FontWeight.BOLD, color="#F59E0B"),
                         ft.Container(
                             content=ft.Text("FLUTTER 60 FPS ENGINE", size=10, weight=ft.FontWeight.BOLD, color="#00D2FF"),
@@ -76,7 +76,7 @@ def main(page: ft.Page):
                     controls=[
                         ft.Container(
                             content=ft.Row([
-                                ft.Icon(name=ft.Icons.CLOUD_DONE, color="#10B981", size=16),
+                                ft.Icon(ft.Icons.CLOUD_DONE, color="#10B981", size=16),
                                 ft.Text("Gemini 1.5 Active", size=12, color="#10B981")
                             ]),
                             bgcolor="#064E3B",
@@ -85,7 +85,7 @@ def main(page: ft.Page):
                         ),
                         ft.Container(
                             content=ft.Row([
-                                ft.Icon(name=ft.Icons.API, color="#3B82F6", size=16),
+                                ft.Icon(ft.Icons.API, color="#3B82F6", size=16),
                                 ft.Text("FastAPI :8000", size=12, color="#3B82F6")
                             ]),
                             bgcolor="#1E3A8A",
@@ -139,7 +139,7 @@ def main(page: ft.Page):
             storyboard_grid.controls.append(
                 ft.Container(
                     content=ft.Column([
-                        ft.Icon(name=ft.Icons.ANALYTICS_OUTLINED, size=48, color="#F59E0B"),
+                        ft.Icon(ft.Icons.ANALYTICS_OUTLINED, size=48, color="#F59E0B"),
                         ft.Text("Nenhum relatório de cortes minerado para este culto ainda.", size=14, color="#9CA3AF"),
                         ft.Text("Clique no botão 'Minerar Teologia (Gemini)' para processar.", size=12, color="#6B7280")
                     ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
@@ -254,7 +254,7 @@ def main(page: ft.Page):
     top_control_bar = ft.Container(
         content=ft.Row([
             ft.Row([
-                ft.Icon(name=ft.Icons.AUDIO_FILE, color="#F59E0B"),
+                ft.Icon(ft.Icons.AUDIO_FILE, color="#F59E0B"),
                 audio_dropdown
             ], spacing=10),
             ft.ElevatedButton(
@@ -306,4 +306,7 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     logger.info("Inicializando Flet App (Flutter Engine)...")
-    ft.app(target=main)
+    if hasattr(ft, "run"):
+        ft.run(target=main)
+    else:
+        ft.app(target=main)
