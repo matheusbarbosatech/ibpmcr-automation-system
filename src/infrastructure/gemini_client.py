@@ -61,32 +61,31 @@ class TheologyMinerClient:
         if not transcript_text or len(transcript_text.strip()) < 50:
             raise ValueError("Texto da transcrição é insuficiente para análise teológica.")
 
-        target_model = model_name or settings.GOOGLE_GEMINI_MODEL or "gemini-flash-latest"
+        # Limita o texto para no máximo 60.000 caracteres para respeitar os limites de tokens da cota gratuita da Google API
+        MAX_CHARS = 60000
+        if len(transcript_text) > MAX_CHARS:
+            logger.info(f"✂️ Truncando transcrição de {len(transcript_text)} para {MAX_CHARS} caracteres para respeitar a cota de tokens.", job_id=job_id)
+            transcript_text = transcript_text[:MAX_CHARS]
 
-        prompt_user = f"ID do Vídeo de Origem: {source_video_id}\n\nTranscrição Bruta do Culto:\n{transcript_text[:300000]}"
-        prompt_completo = f"{SYSTEM_PROMPT_PENTECOSTAL}\n\n{prompt_user}"
+        prompt_completo = f"{SYSTEM_PROMPT_PENTECOSTAL}\n\nTRANSCRIÇÃO DO CULTO:\n{transcript_text}"
 
         logger.info(
             "Enviando transcrição para mineração no Gemini API",
             job_id=job_id,
-            model=target_model,
+            model=self.model,
             text_length=len(transcript_text)
         )
 
         models_to_try = [
             "gemini-flash-latest",
-            "gemini-pro-latest",
-            "gemini-2.5-flash-lite"
+            "gemini-pro-latest"
         ]
-        # Remove duplicatas mantendo ordem
-        seen = set()
-        models_to_try = [m for m in models_to_try if m and not (m in seen or seen.add(m))]
 
         last_error = None
         for target_model in models_to_try:
-            for attempt in range(1, 3):
+            for attempt in range(1, 4):
                 try:
-                    logger.info(f"🧠 Disparando mineração teológica no Gemini ({target_model})", job_id=job_id)
+                    logger.info(f"🧠 Disparando mineração teológica no Gemini ({target_model}) - Tentativa {attempt}", job_id=job_id)
                     response = self.client.models.generate_content(
                         model=target_model,
                         contents=prompt_completo,
@@ -116,8 +115,8 @@ class TheologyMinerClient:
                 except Exception as e:
                     last_error = e
                     is_rate_limit = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "503" in str(e)
-                    wait_time = 20 if is_rate_limit else 5
-                    logger.warning(f"⚠️ Instabilidade/Limite de cota no modelo {target_model}. Aguardando {wait_time}s para nova tentativa...", job_id=job_id)
+                    wait_time = 45 if is_rate_limit else 10
+                    logger.warning(f"⚠️ Limite de cota/instabilidade no modelo {target_model}. Aguardando {wait_time}s para nova tentativa (Tentativa {attempt}/3)...", job_id=job_id)
                     time.sleep(wait_time)
 
         logger.error("Falha na mineração teológica após testar todos os modelos Gemini", job_id=job_id, error=str(last_error))
