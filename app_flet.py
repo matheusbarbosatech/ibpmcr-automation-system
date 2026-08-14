@@ -65,7 +65,7 @@ def main(page: ft.Page):
                         ft.Container(
                             content=ft.Text("FLUTTER 60 FPS ENGINE", size=10, weight=ft.FontWeight.BOLD, color="#00D2FF"),
                             bgcolor="#1E222B",
-                            padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                            padding=ft.padding.only(left=8, right=8, top=4, bottom=4),
                             border_radius=12
                         )
                     ],
@@ -80,7 +80,7 @@ def main(page: ft.Page):
                                 ft.Text("Gemini 1.5 Active", size=12, color="#10B981")
                             ]),
                             bgcolor="#064E3B",
-                            padding=ft.padding.symmetric(horizontal=10, vertical=5),
+                            padding=ft.padding.only(left=10, right=10, top=5, bottom=5),
                             border_radius=8
                         ),
                         ft.Container(
@@ -89,7 +89,7 @@ def main(page: ft.Page):
                                 ft.Text("FastAPI :8000", size=12, color="#3B82F6")
                             ]),
                             bgcolor="#1E3A8A",
-                            padding=ft.padding.symmetric(horizontal=10, vertical=5),
+                            padding=ft.padding.only(left=10, right=10, top=5, bottom=5),
                             border_radius=8
                         )
                     ],
@@ -190,7 +190,7 @@ def main(page: ft.Page):
                         ft.Container(
                             content=ft.Text(cut.get("category", "Hook"), size=10, weight=ft.FontWeight.BOLD, color="#D47AFF"),
                             bgcolor="#2D1A3F",
-                            padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                            padding=ft.padding.only(left=8, right=8, top=4, bottom=4),
                             border_radius=4
                         )
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
