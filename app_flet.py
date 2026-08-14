@@ -100,7 +100,7 @@ def main(page: ft.Page):
         ),
         bgcolor="#16181D",
         padding=ft.padding.Padding(20, 12, 20, 12),
-        border=ft.border.only(bottom=ft.BorderSide(1, "#262930"))
+        border=ft.border.all(1, "#262930")
     )
 
     # -------------------------------------------------------------------------
