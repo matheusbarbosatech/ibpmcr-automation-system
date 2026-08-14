@@ -56,16 +56,24 @@ class DecoupledTheologyMinerService:
         trans_dir.mkdir(parents=True, exist_ok=True)
 
         txt_path = trans_dir / f"{audio_file_path.stem}.txt"
+        srt_path = trans_dir / f"{audio_file_path.stem}.srt"
         transcript_text = ""
 
-        # STEP 1 (FASE 2): Transcrição se o arquivo .txt ainda não existir
+        # STEP 1 (FASE 2): Verifica se a transcrição local (.txt ou .srt) do Whisper Desktop existe
         if txt_path.exists() and txt_path.stat().st_size > 50:
-            logger.info("📄 Transcrição .txt já existente encontrada no disco. Pulando Groq API.", file=txt_path.name)
-            with open(txt_path, "r", encoding="utf-8") as f:
+            logger.info("📄 Transcrição .txt local encontrada no disco. Usando transcrição off-line.", file=txt_path.name)
+            with open(txt_path, "r", encoding="utf-8", errors="ignore") as f:
                 transcript_text = f.read()
+        elif srt_path.exists() and srt_path.stat().st_size > 50:
+            logger.info("📄 Transcrição .srt local (Whisper Desktop) encontrada. Extraindo texto.", file=srt_path.name)
+            with open(srt_path, "r", encoding="utf-8", errors="ignore") as f:
+                raw_lines = f.readlines()
+                # Remove timestamps e índices numéricos do SRT
+                text_lines = [l.strip() for l in raw_lines if l.strip() and not l.strip().isdigit() and "-->" not in l]
+                transcript_text = " ".join(text_lines)
         else:
             if not self.groq.client:
-                raise ValueError("GROQ_API_KEY necessária para transcrição da Fase 2.")
+                raise ValueError("Nenhuma transcrição local (.txt / .srt) encontrada e GROQ_API_KEY não configurada no .env.")
             
             trans_res = self.groq.transcribe_audio(audio_file_path, job_id=f"{job_id}_groq")
             transcript_text = trans_res.get("text", "")
