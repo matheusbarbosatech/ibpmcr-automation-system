@@ -73,36 +73,55 @@ class TheologyMinerClient:
             text_length=len(transcript_text)
         )
 
-        try:
-            response = self.client.models.generate_content(
-                model=target_model,
-                contents=prompt_completo,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=SermonMiningResponse,
-                    temperature=0.3
-                )
-            )
+        models_to_try = [
+            "gemini-flash-latest",
+            "gemini-pro-latest",
+            "gemini-2.5-flash-lite"
+        ]
+        # Remove duplicatas mantendo ordem
+        seen = set()
+        models_to_try = [m for m in models_to_try if m and not (m in seen or seen.add(m))]
 
-            time.sleep(4.5)
+        last_error = None
+        for target_model in models_to_try:
+            for attempt in range(1, 3):
+                try:
+                    logger.info(f"🧠 Disparando mineração teológica no Gemini ({target_model})", job_id=job_id)
+                    response = self.client.models.generate_content(
+                        model=target_model,
+                        contents=prompt_completo,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_schema=SermonMiningResponse,
+                            temperature=0.3
+                        )
+                    )
 
-            if not response or not response.text:
-                raise RuntimeError("Resposta vazia retornada pela API do Gemini.")
+                    time.sleep(2)
 
-            if hasattr(response, "parsed") and response.parsed:
-                parsed_response: SermonMiningResponse = response.parsed
-                parsed_response.job_id = job_id
-                parsed_response.source_video_id = source_video_id
-                return parsed_response
+                    if not response or not response.text:
+                        raise RuntimeError("Resposta vazia retornada pela API do Gemini.")
 
-            parsed_json = SermonMiningResponse.model_validate_json(response.text)
-            parsed_json.job_id = job_id
-            parsed_json.source_video_id = source_video_id
-            return parsed_json
+                    if hasattr(response, "parsed") and response.parsed:
+                        parsed_response: SermonMiningResponse = response.parsed
+                        parsed_response.job_id = job_id
+                        parsed_response.source_video_id = source_video_id
+                        return parsed_response
 
-        except Exception as e:
-            logger.error("Falha na mineração teológica do Gemini", job_id=job_id, error=str(e))
-            raise RuntimeError(f"Erro na API do Gemini: {str(e)}")
+                    parsed_json = SermonMiningResponse.model_validate_json(response.text)
+                    parsed_json.job_id = job_id
+                    parsed_json.source_video_id = source_video_id
+                    return parsed_json
+
+                except Exception as e:
+                    last_error = e
+                    is_rate_limit = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "503" in str(e)
+                    wait_time = 20 if is_rate_limit else 5
+                    logger.warning(f"⚠️ Instabilidade/Limite de cota no modelo {target_model}. Aguardando {wait_time}s para nova tentativa...", job_id=job_id)
+                    time.sleep(wait_time)
+
+        logger.error("Falha na mineração teológica após testar todos os modelos Gemini", job_id=job_id, error=str(last_error))
+        raise RuntimeError(f"Erro na API do Gemini: {str(last_error)}")
 
     def analyze_audio_file(
         self,
