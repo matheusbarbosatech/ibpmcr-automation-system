@@ -13,24 +13,50 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-# Verificação de sincronização com Google Drive (G:\Meu Drive\IBPM_CR_Cortes)
-GDRIVE_BASE = Path(r"G:\Meu Drive\IBPM_CR_Cortes")
+# ☁️ Detecção Automática e Dinâmica do Caminho do Google Drive
+env_drive_path = os.getenv("DRIVE_MOUNT_PATH", r"G:\Meu Drive\IBPM_CR_Cortes")
+
+POSSIBLE_GDRIVE_PATHS = [
+    Path(env_drive_path),
+    Path(r"G:\Meu Drive\IBPM_CR_Cortes"),
+    Path(r"G:\My Drive\IBPM_CR_Cortes"),
+    Path(r"G:\IBPM_CR_Cortes"),
+    Path(os.path.expanduser(r"~\Google Drive\IBPM_CR_Cortes")),
+]
+
+GDRIVE_BASE = None
+for p in POSSIBLE_GDRIVE_PATHS:
+    if p.exists():
+        GDRIVE_BASE = p
+        break
+
+if not GDRIVE_BASE:
+    # Se nenhuma letra G: estiver montada, força a tentativa no caminho configurado no .env
+    GDRIVE_BASE = Path(env_drive_path)
+
 USE_GDRIVE = GDRIVE_BASE.exists()
 
-# Diretórios Principais (Com fallback transparente local <-> Google Drive)
+# Diretórios Principais (Com fallback inteligente no Google Drive)
 DATA_DIR = BASE_DIR / "data"
 DB_DIR = GDRIVE_BASE if USE_GDRIVE else (DATA_DIR / "db")
 JSON_EXPORT_DIR = DATA_DIR / "json"
-AUDIO_DIR = GDRIVE_BASE / "audio_podcasts" if (USE_GDRIVE and (GDRIVE_BASE / "audio_podcasts").exists()) else (DATA_DIR / "audio_podcasts")
 
-# Subpastas Unificadas da Fase 2 e 3 em audio_podcasts/
+# Pasta de Áudio e Subpastas Unificadas da Fase 2 e 3
+if USE_GDRIVE:
+    AUDIO_DIR = GDRIVE_BASE / "audio_podcasts"
+else:
+    AUDIO_DIR = DATA_DIR / "audio_podcasts"
+
 TRANSCRICOES_DIR = AUDIO_DIR / "transcricoes"
 INSIGHTS_DIR = AUDIO_DIR / "conteudos_fase3"
 REPORT_DIR = BASE_DIR / "reports"
 
 # Garante que os diretórios existam
 for path in [DATA_DIR, DB_DIR, JSON_EXPORT_DIR, AUDIO_DIR, TRANSCRICOES_DIR, INSIGHTS_DIR, REPORT_DIR]:
-    path.mkdir(parents=True, exist_ok=True)
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
 
 # Caminhos de Arquivos de Persistência
 DB_PATH = DB_DIR / "ibpmcr_master.db"
@@ -59,7 +85,7 @@ GROQ_FALLBACK_MODELS = [
     "mixtral-8x7b-32768"
 ]
 
-# Parâmetros de Áudio (MP3 Leve mono a 64kbps 16kHz)
+# Parâmetros de Áudio
 AUDIO_BITRATE = "64k"
 AUDIO_CHANNELS = 1  # Mono
 AUDIO_SAMPLE_RATE = "16000"
