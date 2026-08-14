@@ -306,7 +306,4 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     logger.info("Inicializando Flet App (Flutter Engine)...")
-    if hasattr(ft, "run"):
-        ft.run(target=main)
-    else:
-        ft.app(target=main)
+    ft.app(main)
