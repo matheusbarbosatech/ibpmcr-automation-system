@@ -2,7 +2,7 @@
 Backend Server FastAPI - IBPM CR AUTOMATION SYSTEM.
 
 Fornece endpoints RESTful para ingestão por link do YouTube, mineração teológica via Gemini API,
-listagem do acervo de cultos e orquestração de renderização de vídeos (Shorts 9:16).
+listagem do acervo de cultos e orquestração de renderização de vídeos (Shorts 9:16 e Mid-Form 16:9).
 
 Execução no Terminal:
     uvicorn src.api.main_api:app --reload --port 8000
@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -33,7 +33,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Suporte a CORS para comunicação limpa com o Dashboard Streamlit
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,13 +41,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Servidor estático para os vídeos renderizados e áudios
 app.mount("/media", StaticFiles(directory="data"), name="media")
 
-
-# =============================================================================
-# MODELOS DE REQUISIÇÃO E RESPOSTA HTTP (PYDANTIC V2)
-# =============================================================================
 
 class IngestRequest(BaseModel):
     youtube_url: str = Field(description="URL ou ID do vídeo do YouTube para ingestão do áudio MP3.")
@@ -60,16 +54,13 @@ class ProcessGeminiRequest(BaseModel):
 
 
 class RenderRequest(BaseModel):
-    cut_id: str = Field(description="Identificador único do corte (ex: 'short_001').")
+    cut_id: str = Field(description="Identificador único do corte.")
     video_url: str = Field(description="URL do vídeo no YouTube para corte cirúrgico.")
     cut_payload: Dict[str, Any] = Field(description="Payload estruturado do corte.")
+    format_type: str = Field(default="9:16", description="Formato do vídeo: '9:16' (Shorts/Reels) ou '16:9' (YouTube Mid-Form).")
     start_sec: float = Field(default=0.0, description="Segundo inicial do trecho.")
     end_sec: float = Field(default=45.0, description="Segundo final do trecho.")
 
-
-# =============================================================================
-# ENDPOINTS RESTFUL
-# =============================================================================
 
 @app.get("/")
 def read_root():
@@ -83,10 +74,6 @@ def read_root():
 
 @app.post("/api/v1/ingest")
 def api_ingest_youtube_audio(req: IngestRequest):
-    """
-    POST /api/v1/ingest
-    Recebe a URL do YouTube e faz o download do áudio MP3 no padrão exato do sistema.
-    """
     logger.info("Solicitação de Ingestão via API recebida", url=req.youtube_url)
     try:
         audio_path = download_single_sermon_mp3(req.youtube_url)
@@ -107,15 +94,10 @@ def api_ingest_youtube_audio(req: IngestRequest):
 
 @app.post("/api/v1/process-gemini")
 def api_process_gemini_audio(req: ProcessGeminiRequest):
-    """
-    POST /api/v1/process-gemini
-    Submete um arquivo de áudio MP3 local para a Rota Nativa da Gemini 1.5 Flash File API.
-    """
     audio_path = Path(req.audio_file_path)
     logger.info("Solicitação de Mineração via Gemini API recebida", audio=str(audio_path))
 
     if not audio_path.exists():
-        # Tenta resolver na pasta data/audio_podcasts
         candidate = Path("data/audio_podcasts") / audio_path.name
         if candidate.exists():
             audio_path = candidate
@@ -132,7 +114,6 @@ def api_process_gemini_audio(req: ProcessGeminiRequest):
             job_id=f"job_api_{v_id}"
         )
 
-        # Salva o arquivo .insights.json
         insights_dir = Path("data/audio_podcasts/conteudos_fase3")
         insights_dir.mkdir(parents=True, exist_ok=True)
         insight_path = insights_dir / f"{audio_path.stem}.insights.json"
@@ -141,7 +122,6 @@ def api_process_gemini_audio(req: ProcessGeminiRequest):
         with open(insight_path, "w", encoding="utf-8") as f:
             f.write(raw_json_str)
 
-        # Registra no SQLite
         state_mgr = MasterPlanManager()
         state_mgr.save_insights_fase3(
             video_id=v_id,
@@ -164,10 +144,6 @@ def api_process_gemini_audio(req: ProcessGeminiRequest):
 
 @app.get("/api/v1/cultos")
 def api_list_cultos():
-    """
-    GET /api/v1/cultos
-    Retorna o acervo completo de cultos mapeados, áudios baixados e insights minerados.
-    """
     state_mgr = MasterPlanManager()
     videos = state_mgr.get_all_videos()
 
@@ -175,10 +151,7 @@ def api_list_cultos():
     insights_dir = Path("data/audio_podcasts/conteudos_fase3")
 
     results = []
-    
-    # Mapeia arquivos físicos no disco caso o banco esteja sincronizando
     local_audios = {f.name: f for f in audio_dir.glob("*") if f.suffix.lower() in [".mp3", ".m4a", ".webm"]}
-    local_insights = {f.name: f for f in insights_dir.glob("*.insights.json")}
 
     if videos:
         for v in videos:
@@ -190,7 +163,6 @@ def api_list_cultos():
             v_dict["has_insights_file"] = os.path.exists(os.path.join(insights_dir, ins_fn)) if ins_fn else False
             results.append(v_dict)
     else:
-        # Fallback lendo direto dos diretórios
         for fname, fpath in local_audios.items():
             ins_fn = f"{fpath.stem}.insights.json"
             results.append({
@@ -210,26 +182,35 @@ def api_list_cultos():
 
 @app.post("/api/v1/render")
 def api_render_cut(req: RenderRequest):
-    """
-    POST /api/v1/render
-    Dispara o pipeline de renderização do vídeo (Sniper yt-dlp + Crop 9:16 + Subtitles .ASS + FFmpeg EBU R128).
-    """
-    logger.info("Solicitação de Renderização recebida", cut_id=req.cut_id)
+    logger.info("Solicitação de Renderização recebida", cut_id=req.cut_id, format=req.format_type)
     try:
         pipeline = VideoPipelineService()
-        result = pipeline.execute_short_cut_pipeline(
-            video_url=req.video_url,
-            cut_payload=req.cut_payload,
-            start_sec=req.start_sec,
-            end_sec=req.end_sec,
-            publish_to_social=False,
-            job_id=f"job_render_{req.cut_id}"
-        )
+        if req.format_type == "16:9":
+            result = pipeline.execute_mid_cut_pipeline(
+                video_url=req.video_url,
+                cut_payload=req.cut_payload,
+                start_sec=req.start_sec,
+                end_sec=req.end_sec,
+                publish_to_social=False,
+                job_id=f"job_render_mid_{req.cut_id}"
+            )
+        else:
+            result = pipeline.execute_short_cut_pipeline(
+                video_url=req.video_url,
+                cut_payload=req.cut_payload,
+                start_sec=req.start_sec,
+                end_sec=req.end_sec,
+                publish_to_social=False,
+                job_id=f"job_render_short_{req.cut_id}"
+            )
+
         return {
             "status": "success",
-            "message": "Renderização de vídeo concluída com sucesso!",
+            "message": f"Renderização {req.format_type} concluída com sucesso!",
             "cut_id": req.cut_id,
-            "final_video_path": result.get("final_video_path")
+            "format": req.format_type,
+            "final_video_path": result.get("final_video_path"),
+            "formatted_description": result.get("formatted_description", "")
         }
     except Exception as e:
         logger.error("Erro no endpoint /api/v1/render", error=str(e))

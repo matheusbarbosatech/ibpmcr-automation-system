@@ -1,8 +1,8 @@
 """
 Dashboard Web Pro (Streamlit Frontend) - IBPM CR AUTOMATION SYSTEM.
 
-Foco Principal: Processamento e Mineração dos +400 Áudios Locais via Gemini 1.5 Flash (File API).
-Segundário: Ingestão de novos links na barra lateral (Sidebar).
+Foco Principal: Processamento dos +400 Áudios Locais via Gemini 1.5 Flash (File API).
+Renderização Dual: Cortes Verticais (Short-Form 9:16) e Cortes Horizontais (Mid-Form 16:9).
 
 Execução no Terminal:
     streamlit run app_dashboard_pro.py
@@ -16,8 +16,8 @@ from pathlib import Path
 
 # Configuração da Página no Streamlit
 st.set_page_config(
-    page_title="IBPM CR - Acervo & Studio Pro",
-    page_icon="🎙️",
+    page_title="IBPM CR - Studio Pro Dual (9:16 e 16:9)",
+    page_icon="🎬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -63,7 +63,7 @@ st.markdown("""
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/youtube-play.png", width=64)
     st.title("IBPM CR Automation")
-    st.caption("Ecossistema de Mineração & Edição 9:16")
+    st.caption("Ecossistema de Mineração & Edição 9:16 e 16:9")
     st.divider()
 
     st.markdown("### 📡 Status da API Backend")
@@ -81,7 +81,6 @@ with st.sidebar:
 
     st.divider()
 
-    # INGESTÃO SECUNDÁRIA POR LINK NA SIDEBAR
     st.markdown("### 📥 Baixar Novo Culto por Link")
     yt_url = st.text_input("URL do YouTube:", placeholder="https://www.youtube.com/watch?v=...", key="sb_url")
     btn_download_sb = st.button("🚀 Baixar Áudio no Padrão", use_container_width=True)
@@ -106,11 +105,10 @@ with st.sidebar:
 # =============================================================================
 # CABEÇALHO PRINCIPAL
 # =============================================================================
-st.markdown('<div class="main-header">🎙️ ACERVO DE CULTOS & STUDIO PRO</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Mineração Teológica dos +400 Áudios Locais via Gemini 1.5 Flash (Rota Nativa sem Colab)</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🎬 IBPM CR - STUDIO PRO (CORTES 9:16 E 16:9)</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Mineração Teológica dos +400 Áudios Locais com Renderização Vertical (Reels/Shorts) e Horizontal (YouTube Exegese)</div>', unsafe_allow_html=True)
 
 
-# Carrega arquivos de áudios locais no computador
 audio_dir = Path("data/audio_podcasts")
 insights_dir = Path("data/audio_podcasts/conteudos_fase3")
 audio_dir.mkdir(parents=True, exist_ok=True)
@@ -125,34 +123,31 @@ mined_count = len(list(insights_dir.glob("*.insights.json")))
 total_audios = len(local_mp3_files)
 pending_count = max(0, total_audios - mined_count)
 
-# Métricas no Topo
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("📂 Áudios Baixados no PC", total_audios)
-m2.metric("🟢 Cultos Minerados (Fase 3)", mined_count)
-m3.metric("🟡 Pendentes de Mineração", pending_count)
-m4.metric("🧠 Modelo de IA", "Gemini 1.5 Flash")
+m2.metric("🟢 Cultos Minerados", mined_count)
+m3.metric("🟡 Pendentes", pending_count)
+m4.metric("🎥 Format Target", "9:16 & 16:9")
 
 st.divider()
 
 
-# Abas Principais Focadas no Acervo Local
 tab_acervo, tab_editor = st.tabs([
     "🎧 1. Acervo Local & Mineração Gemini 1.5",
-    "✂️ 2. Editor de Cortes Virais (FFmpeg 9:16)"
+    "✂️ 2. Editor & Cortes Virais (9:16 e 16:9)"
 ])
 
 
 # =============================================================================
-# ABA 1: ACERVO LOCAL & MINERAÇÃO TEOLÓGICA (FOCO PRINCIPAL)
+# ABA 1: ACERVO LOCAL & MINERAÇÃO TEOLÓGICA
 # =============================================================================
 with tab_acervo:
-    st.subheader("🎧 Áudios Locais Baixados no seu Computador")
-    st.write("Selecione qualquer um dos áudios do seu acervo para rodar a transcrição + mineração teológica na nuvem do Gemini.")
+    st.subheader("🎧 Áudios Locais no seu Computador")
+    st.write("Selecione um culto para rodar a mineração e extrair automaticamente tanto os cortes curtos quanto os cortes médios.")
 
     if not local_mp3_files:
         st.info("Nenhum áudio encontrado na pasta local 'data/audio_podcasts'. Use a barra lateral para baixar um culto.")
     else:
-        # Monta opções com indicador visual de status
         options_dict = {}
         for f in local_mp3_files:
             ins_file = insights_dir / f"{f.stem}.insights.json"
@@ -183,7 +178,7 @@ with tab_acervo:
                     )
                     if resp_min.status_code == 200:
                         st.balloons()
-                        st.success("🎉 Mineração e Transcrição concluídas com sucesso via Gemini 1.5 Flash File API!")
+                        st.success("🎉 Mineração Teológica concluída com sucesso! Cortes 9:16 e 16:9 gerados!")
                         st.rerun()
                     else:
                         st.error(f"Erro na API Backend: {resp_min.text}")
@@ -192,7 +187,6 @@ with tab_acervo:
 
         st.divider()
 
-        # Exibição do Payload Minerado se o culto selecionado já tiver insights
         ins_path_selected = insights_dir / f"{selected_file.stem}.insights.json"
         if ins_path_selected.exists() and ins_path_selected.stat().st_size > 100:
             st.subheader(f"📊 Relatório de Insights Minerados: {selected_file.stem}")
@@ -203,25 +197,40 @@ with tab_acervo:
             mid_cuts = payload_data.get("mid_form_cuts", [])
 
             c1, c2 = st.columns(2)
-            c1.markdown(f"**Cortes Verticais (Short-Form 9:16):** `{len(short_cuts)}`")
-            c2.markdown(f"**Cortes Horizontais (Mid-Form 16:9):** `{len(mid_cuts)}`")
+            c1.markdown(f"**📱 Cortes Verticais (Short-Form 9:16):** `{len(short_cuts)}`")
+            c2.markdown(f"**📺 Cortes Horizontais (Mid-Form 16:9):** `{len(mid_cuts)}`")
 
+            # Exibição dos Cortes Verticais 9:16
+            st.markdown("#### 📱 Cortes Verticais (Shorts / Reels 9:16)")
             for idx, cut in enumerate(short_cuts, 1):
-                with st.expander(f"📌 Corte Short #{idx} - {cut.get('title_hook_a')}"):
+                with st.expander(f"📌 Short #{idx} - {cut.get('title_hook_a')}"):
                     st.markdown(f"**Título A (Curiosidade):** {cut.get('title_hook_a')}")
                     st.markdown(f"**Título B (Dor/Empatia):** {cut.get('title_hook_b')}")
-                    st.markdown(f"**Categoria Homilética:** `{cut.get('category')}`")
-                    st.markdown(f"**Emoção Predominante:** `{cut.get('dominant_emotion')}`")
-                    st.markdown(f"**Âncora de Início (7 palavras):** `{cut.get('start_anchor_7_words')}`")
-                    st.markdown(f"**Âncora de Fim (7 palavras):** `{cut.get('end_anchor_7_words')}`")
+                    st.markdown(f"**Âncora Início:** `{cut.get('start_anchor_7_words')}`")
+                    st.markdown(f"**Âncora Fim:** `{cut.get('end_anchor_7_words')}`")
+
+            # Exibição dos Cortes Horizontais 16:9
+            st.markdown("#### 📺 Cortes Horizontais (YouTube Mid-Form 16:9)")
+            for idx, cut in enumerate(mid_cuts, 1):
+                with st.expander(f"📖 Mid-Form #{idx} - {cut.get('title')}"):
+                    st.markdown(f"**Título Otimizado:** {cut.get('title')}")
+                    st.markdown(f"**Sinopse:** {cut.get('synopsis')}")
+                    st.markdown(f"**Âncora Início:** `{cut.get('start_anchor_7_words')}`")
+                    st.markdown(f"**Âncora Fim:** `{cut.get('end_anchor_7_words')}`")
+                    
+                    chaps = cut.get("suggested_chapters", [])
+                    if chaps:
+                        st.markdown("**Sugestão de Capítulos:**")
+                        for c in chaps:
+                            st.write(f"- `{c.get('chapter_title')}`")
 
 
 # =============================================================================
-# ABA 2: EDITOR DE CORTES VIRAIS (FFMPEG 9:16)
+# ABA 2: EDITOR & CORTES VIRAIS (9:16 E 16:9 DUAL)
 # =============================================================================
 with tab_editor:
-    st.subheader("✂️ Renderização e Edição de Vídeos Verticais (FFmpeg 9:16)")
-    st.write("Selecione um culto minerado para renderizar o vídeo vertical com crop 9:16, legendas .ASS Karaokê e normalização EBU R128.")
+    st.subheader("✂️ Studio Editor - Renderização Dual (9:16 Vertical & 16:9 Horizontal)")
+    st.write("Escolha o formato desejado para disparar o motor FFmpeg e pré-visualizar os vídeos renderizados.")
 
     mined_files = list(insights_dir.glob("*.insights.json"))
 
@@ -236,44 +245,103 @@ with tab_editor:
                 payload = json.load(f)
 
             short_cuts = payload.get("short_form_cuts", [])
+            mid_cuts = payload.get("mid_form_cuts", [])
             video_id_src = payload.get("source_video_id", "FlqCTPRsIT4")
 
-            for idx, cut in enumerate(short_cuts, 1):
-                st.markdown(f"### 🎬 Corte Vertical #{idx}: {cut.get('title_hook_a')}")
-                
-                col_det, col_rnd = st.columns([2, 1])
-                with col_det:
-                    st.write(f"**Título A:** {cut.get('title_hook_a')}")
-                    st.write(f"**Título B:** {cut.get('title_hook_b')}")
-                    st.write(f"**Âncora Início:** `{cut.get('start_anchor_7_words')}`")
-                    st.write(f"**Âncora Fim:** `{cut.get('end_anchor_7_words')}`")
+            tab_v, tab_h = st.tabs(["📱 Cortes Verticais (Short-Form 9:16)", "📺 Cortes Horizontais (Mid-Form 16:9)"])
 
-                with col_rnd:
-                    cut_id_str = cut.get("cut_id") or f"short_{idx:03d}"
-                    btn_r = st.button(f"🎞️ Renderizar Corte #{idx}", key=f"rnd_{idx}")
-                    
-                    if btn_r:
-                        with st.spinner(f"Renderizando {cut_id_str} no FFmpeg..."):
-                            try:
-                                r_res = requests.post(
-                                    f"{API_BASE_URL}/api/v1/render",
-                                    json={
-                                        "cut_id": cut_id_str,
-                                        "video_url": f"https://www.youtube.com/watch?v={video_id_src}",
-                                        "cut_payload": cut,
-                                        "start_sec": 0.0,
-                                        "end_sec": 45.0
-                                    },
-                                    timeout=300
-                                )
-                                if r_res.status_code == 200:
-                                    st.success("✅ Renderização concluída!")
-                                    clip_path = r_res.json().get("final_video_path")
-                                    if clip_path and os.path.exists(clip_path):
-                                        st.video(clip_path)
-                                else:
-                                    st.error(f"Erro na renderização: {r_res.text}")
-                            except Exception as e:
-                                st.error(f"Falha na API: {e}")
+            # -----------------------------------------------------------------
+            # RENDERIZAÇÃO VERTICAL 9:16
+            # -----------------------------------------------------------------
+            with tab_v:
+                st.markdown("### 📱 Formato Vertical (Reels / Shorts / TikTok 9:16)")
+                if not short_cuts:
+                    st.info("Nenhum corte vertical minerado neste relatório.")
+                for idx, cut in enumerate(short_cuts, 1):
+                    st.markdown(f"#### 🎬 Short #{idx}: {cut.get('title_hook_a')}")
+                    col_det, col_rnd = st.columns([2, 1])
+                    with col_det:
+                        st.write(f"**Título A:** {cut.get('title_hook_a')}")
+                        st.write(f"**Título B:** {cut.get('title_hook_b')}")
+                        st.write(f"**Âncora Início:** `{cut.get('start_anchor_7_words')}`")
+                        st.write(f"**Âncora Fim:** `{cut.get('end_anchor_7_words')}`")
 
-                st.divider()
+                    with col_rnd:
+                        cut_id_str = cut.get("cut_id") or f"short_{idx:03d}"
+                        btn_r = st.button(f"🎞️ Renderizar 9:16 #{idx}", key=f"rnd_short_{idx}")
+                        
+                        if btn_r:
+                            with st.spinner(f"Renderizando {cut_id_str} no FFmpeg (Crop 9:16 + Subtitles .ASS)..."):
+                                try:
+                                    r_res = requests.post(
+                                        f"{API_BASE_URL}/api/v1/render",
+                                        json={
+                                            "cut_id": cut_id_str,
+                                            "video_url": f"https://www.youtube.com/watch?v={video_id_src}",
+                                            "cut_payload": cut,
+                                            "format_type": "9:16",
+                                            "start_sec": 0.0,
+                                            "end_sec": 45.0
+                                        },
+                                        timeout=300
+                                    )
+                                    if r_res.status_code == 200:
+                                        st.success("✅ Renderização 9:16 concluída!")
+                                        clip_path = r_res.json().get("final_video_path")
+                                        if clip_path and os.path.exists(clip_path):
+                                            st.video(clip_path)
+                                    else:
+                                        st.error(f"Erro: {r_res.text}")
+                                except Exception as e:
+                                    st.error(f"Falha na API: {e}")
+                    st.divider()
+
+            # -----------------------------------------------------------------
+            # RENDERIZAÇÃO HORIZONTAL 16:9
+            # -----------------------------------------------------------------
+            with tab_h:
+                st.markdown("### 📺 Formato Horizontal (YouTube Mid-Form 16:9)")
+                if not mid_cuts:
+                    st.info("Nenhum corte horizontal minerado neste relatório.")
+                for idx, cut in enumerate(mid_cuts, 1):
+                    st.markdown(f"#### 📖 Mid-Form #{idx}: {cut.get('title')}")
+                    col_det, col_rnd = st.columns([2, 1])
+                    with col_det:
+                        st.write(f"**Título:** {cut.get('title')}")
+                        st.write(f"**Sinopse:** {cut.get('synopsis')}")
+                        st.write(f"**Âncora Início:** `{cut.get('start_anchor_7_words')}`")
+                        st.write(f"**Âncora Fim:** `{cut.get('end_anchor_7_words')}`")
+
+                    with col_rnd:
+                        cut_id_str = cut.get("cut_id") or f"mid_{idx:03d}"
+                        btn_r_mid = st.button(f"🎞️ Renderizar 16:9 #{idx}", key=f"rnd_mid_{idx}")
+                        
+                        if btn_r_mid:
+                            with st.spinner(f"Renderizando {cut_id_str} no FFmpeg (16:9 HD + EBU R128)..."):
+                                try:
+                                    r_res = requests.post(
+                                        f"{API_BASE_URL}/api/v1/render",
+                                        json={
+                                            "cut_id": cut_id_str,
+                                            "video_url": f"https://www.youtube.com/watch?v={video_id_src}",
+                                            "cut_payload": cut,
+                                            "format_type": "16:9",
+                                            "start_sec": 0.0,
+                                            "end_sec": 300.0
+                                        },
+                                        timeout=300
+                                    )
+                                    if r_res.status_code == 200:
+                                        res_json = r_res.json()
+                                        st.success("✅ Renderização 16:9 concluída!")
+                                        clip_path = res_json.get("final_video_path")
+                                        if clip_path and os.path.exists(clip_path):
+                                            st.video(clip_path)
+                                        
+                                        st.subheader("📝 Descrição Formatada com Capítulos para o YouTube:")
+                                        st.code(res_json.get("formatted_description", ""), language="markdown")
+                                    else:
+                                        st.error(f"Erro: {r_res.text}")
+                                except Exception as e:
+                                    st.error(f"Falha na API: {e}")
+                    st.divider()
