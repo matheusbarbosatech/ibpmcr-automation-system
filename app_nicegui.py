@@ -292,11 +292,13 @@ def main_page():
 
 # Executa o Servidor Web do NiceGUI na Porta 8080
 if __name__ in {"__main__", "__mp_main__"}:
-    logger.info("Inicializando NiceGUI Studio App na porta 8080...")
+    logger.info("Inicializando NiceGUI Studio App na porta 8080 (host=127.0.0.1)...")
     ui.run(
         title="IBPM CR - Studio Pro",
+        host="127.0.0.1",
         port=8080,
         reload=False,
         dark=True,
+        reconnect_timeout=10.0,
         storage_secret="ibpmcr_secret_key"
     )
