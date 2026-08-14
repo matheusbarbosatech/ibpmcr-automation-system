@@ -44,6 +44,7 @@ class GroqWhisperClient:
 
         cmd = [
             ffmpeg_bin, "-y",
+            "-threads", "1",
             "-i", str(input_audio),
             "-ac", "1",
             "-ar", "16000",
