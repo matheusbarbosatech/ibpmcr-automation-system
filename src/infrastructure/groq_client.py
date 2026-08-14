@@ -70,6 +70,82 @@ class GroqWhisperClient:
             logger.error("Falha na compactação do áudio via FFmpeg", error=e.stderr)
             raise RuntimeError(f"Erro no FFmpeg: {e.stderr}")
 
+    def analyze_transcript_with_groq(
+        self,
+        transcript_text: str,
+        source_video_id: str = "IBPM_CULTO",
+        job_id: str = "job_groq_llama_mining"
+    ) -> Dict[str, Any]:
+        """
+        Executa a mineração teológica (Fase 3) via Groq API usando Llama 3.3 70B com 14.400 req/dia.
+        Retorna o dicionário serializável do SermonMiningResponse.
+        """
+        if not self.client:
+            raise ValueError("GROQ_API_KEY necessária para mineração via Llama 3.3.")
+
+        from src.infrastructure.gemini_client import SYSTEM_PROMPT_PENTECOSTAL
+
+        MAX_CHARS = 32000
+        if len(transcript_text) > MAX_CHARS:
+            transcript_text = transcript_text[:MAX_CHARS]
+
+        prompt_user = f"ID do Vídeo: {source_video_id}\n\nTRANSCRIÇÃO DO CULTO:\n{transcript_text}"
+
+        logger.info("🧠 Disparando Mineração Teológica no Groq (Llama 3.3 70B)", job_id=job_id, text_len=len(transcript_text))
+
+        try:
+            response = self.client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT_PENTECOSTAL},
+                    {"role": "user", "content": prompt_user}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3
+            )
+
+            res_text = response.choices[0].message.content
+            if not res_text:
+                raise RuntimeError("Resposta vazia da API do Groq Llama.")
+
+            data = json.loads(res_text)
+
+            # Normalização de Chaves (Short-Form vs Mid-Form)
+            short_cuts = data.get("short_form_cuts", [])
+            mid_cuts = data.get("mid_form_cuts", [])
+
+            if not short_cuts and not mid_cuts and "cortes" in data:
+                for c in data["cortes"]:
+                    fmt = str(c.get("formato", "")).lower()
+                    cut_obj = {
+                        "cut_id": f"short_{len(short_cuts)+1:03d}" if "short" in fmt else f"mid_{len(mid_cuts)+1:03d}",
+                        "title_hook_a": c.get("titulo", c.get("title_hook_a", "Corte Minerado")),
+                        "title_hook_b": c.get("subtitulo", c.get("title_hook_b", "Mensagem de Impacto")),
+                        "start_anchor_7_words": c.get("start_anchor_7_words", ""),
+                        "end_anchor_7_words": c.get("end_anchor_7_words", ""),
+                        "category": c.get("categoria", "Exegese"),
+                        "emotional_tone": c.get("tom", "Inspirador")
+                    }
+                    if "short" in fmt:
+                        short_cuts.append(cut_obj)
+                    else:
+                        mid_cuts.append(cut_obj)
+
+            formatted_payload = {
+                "job_id": job_id,
+                "source_video_id": source_video_id,
+                "sermon_title": data.get("sermon_title", f"Culto IBPM CR {source_video_id}"),
+                "preacher_name": data.get("preacher_name", "Pastor IBPM CR"),
+                "short_form_cuts": short_cuts,
+                "mid_form_cuts": mid_cuts
+            }
+
+            return formatted_payload
+
+        except Exception as e:
+            logger.error("Falha na mineração teológica Groq Llama 3.3", job_id=job_id, error=str(e))
+            raise RuntimeError(f"Erro na API do Groq Llama 3.3: {str(e)}")
+
     def transcribe_audio(
         self,
         audio_file_path: Path,
