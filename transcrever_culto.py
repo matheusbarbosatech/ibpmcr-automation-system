@@ -24,6 +24,9 @@ if hasattr(sys.stdout, 'reconfigure'):
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR))
 
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 from src.core.logger import get_logger
 from src.infrastructure.groq_client import GroqWhisperClient
 

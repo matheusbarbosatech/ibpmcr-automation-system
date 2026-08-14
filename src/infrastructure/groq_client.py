@@ -20,13 +20,16 @@ from src.core.logger import get_logger
 logger = get_logger("GroqWhisperClient")
 
 
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 class GroqWhisperClient:
     """
     Cliente para transcrição de alta velocidade via Groq Whisper API (Whisper Large V3).
     """
 
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
+        self.api_key = api_key or settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY")
         if not self.api_key or len(self.api_key.strip()) < 10:
             logger.warning("GROQ_API_KEY não encontrada no ambiente. Algumas rotas podem falhar.")
             self.client = None
