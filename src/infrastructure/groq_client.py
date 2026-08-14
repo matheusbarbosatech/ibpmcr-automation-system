@@ -47,7 +47,7 @@ class GroqWhisperClient:
             "-i", str(input_audio),
             "-ac", "1",
             "-ar", "16000",
-            "-b:a", "32k",
+            "-b:a", "16k",
             str(output_audio)
         ]
 
