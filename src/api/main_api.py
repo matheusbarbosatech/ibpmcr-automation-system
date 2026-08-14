@@ -1,8 +1,8 @@
 """
 Backend Server FastAPI - IBPM CR AUTOMATION SYSTEM.
 
-Fornece endpoints RESTful para ingestão por link do YouTube, mineração teológica via Gemini API,
-listagem do acervo de cultos e orquestração de renderização de vídeos (Shorts 9:16 e Mid-Form 16:9).
+Fornece endpoints RESTful para ingestão por link do YouTube, mineração teológica desacoplada
+(Fase 2 Groq Whisper + Fase 3 Gemini Text), listagem do acervo de cultos e orquestração de renderização.
 
 Execução no Terminal:
     uvicorn src.api.main_api:app --reload --port 8000
@@ -22,6 +22,7 @@ from src.core.config import settings
 from src.core.logger import get_logger
 from src.core.state_manager import MasterPlanManager
 from src.infrastructure.gemini_client import TheologyMinerClient
+from src.services.theology_miner import DecoupledTheologyMinerService
 from src.services.video_pipeline import VideoPipelineService
 from baixar_culto import download_single_sermon_mp3
 
@@ -29,7 +30,7 @@ logger = get_logger("FastAPIBackend")
 
 app = FastAPI(
     title="IBPM CR Automation System API",
-    description="Backend de Automação de Produção Audiovisual e Mineração Teológica para a Igreja Batista Pentecostal Mundial.",
+    description="Backend de Automação de Produção Audiovisual e Mineração Teológica.",
     version="1.0.0"
 )
 
@@ -95,7 +96,7 @@ def api_ingest_youtube_audio(req: IngestRequest):
 @app.post("/api/v1/process-gemini")
 def api_process_gemini_audio(req: ProcessGeminiRequest):
     audio_path = Path(req.audio_file_path)
-    logger.info("Solicitação de Mineração via Gemini API recebida", audio=str(audio_path))
+    logger.info("Solicitação de Mineração Teológica Desacoplada recebida", audio=str(audio_path))
 
     if not audio_path.exists():
         candidate = Path("data/audio_podcasts") / audio_path.name
@@ -105,38 +106,51 @@ def api_process_gemini_audio(req: ProcessGeminiRequest):
             raise HTTPException(status_code=404, detail=f"Arquivo de áudio não encontrado: {req.audio_file_path}")
 
     try:
-        miner_client = TheologyMinerClient()
         v_id = req.video_id or audio_path.stem
         
-        mining_payload = miner_client.analyze_audio_file(
-            audio_file_path=audio_path,
-            source_video_id=v_id,
-            job_id=f"job_api_{v_id}"
-        )
-
-        insights_dir = Path("data/audio_podcasts/conteudos_fase3")
-        insights_dir.mkdir(parents=True, exist_ok=True)
-        insight_path = insights_dir / f"{audio_path.stem}.insights.json"
+        # Tenta executar a Pipeline Desacoplada (Fase 2 Groq + Fase 3 Gemini Text)
+        has_groq_key = bool(os.getenv("GROQ_API_KEY") and len(os.getenv("GROQ_API_KEY", "").strip()) > 10)
         
-        raw_json_str = mining_payload.model_dump_json(indent=2)
-        with open(insight_path, "w", encoding="utf-8") as f:
-            f.write(raw_json_str)
+        if has_groq_key:
+            decoupled_service = DecoupledTheologyMinerService()
+            result = decoupled_service.execute_decoupled_pipeline(
+                audio_file_path=audio_path,
+                source_video_id=v_id,
+                job_id=f"job_api_decoupled_{v_id}"
+            )
+            return result
+        else:
+            # Fallback direto via Gemini File API
+            miner_client = TheologyMinerClient()
+            mining_payload = miner_client.analyze_audio_file(
+                audio_file_path=audio_path,
+                source_video_id=v_id,
+                job_id=f"job_api_direct_{v_id}"
+            )
 
-        state_mgr = MasterPlanManager()
-        state_mgr.save_insights_fase3(
-            video_id=v_id,
-            idx=1,
-            title=audio_path.stem,
-            insights_dict=mining_payload.model_dump(),
-            raw_json=raw_json_str
-        )
+            insights_dir = Path("data/audio_podcasts/conteudos_fase3")
+            insights_dir.mkdir(parents=True, exist_ok=True)
+            insight_path = insights_dir / f"{audio_path.stem}.insights.json"
+            
+            raw_json_str = mining_payload.model_dump_json(indent=2)
+            with open(insight_path, "w", encoding="utf-8") as f:
+                f.write(raw_json_str)
 
-        return {
-            "status": "success",
-            "message": "Mineração teológica concluída via Gemini 1.5 Flash File API!",
-            "insights_file": insight_path.name,
-            "payload": mining_payload.model_dump()
-        }
+            state_mgr = MasterPlanManager()
+            state_mgr.save_insights_fase3(
+                video_id=v_id,
+                idx=1,
+                title=audio_path.stem,
+                insights_dict=mining_payload.model_dump(),
+                raw_json=raw_json_str
+            )
+
+            return {
+                "status": "success",
+                "message": "Mineração teológica concluída via Gemini 1.5 Flash!",
+                "insights_file": insight_path.name,
+                "payload": mining_payload.model_dump()
+            }
     except Exception as e:
         logger.error("Erro no endpoint /api/v1/process-gemini", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
