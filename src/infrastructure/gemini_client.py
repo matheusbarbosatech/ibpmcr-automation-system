@@ -84,7 +84,6 @@ class TheologyMinerClient:
                 )
             )
 
-            # Freio ABS para respeitar os limites de requisição por minuto (RPM)
             time.sleep(4.5)
 
             if not response or not response.text:
@@ -113,9 +112,9 @@ class TheologyMinerClient:
         job_id: str = "job_audio_gemini"
     ) -> SermonMiningResponse:
         """
-        Rota Nativa do Gemini 1.5 via File API:
-        Faz upload do MP3 local diretamente para o Gemini, ouve o áudio na nuvem do Google
-        e realiza a transcrição + mineração teológica em um único passo, sem estressar a máquina local!
+        Rota Nativa do Gemini 1.5 via File API com Polling de Ativação (ACTIVE):
+        Faz upload do MP3 local para a File API do Google, aguarda o status transitar para ACTIVE
+        e realiza a transcrição + mineração teológica em um único passo.
         """
         if not audio_file_path.exists():
             raise FileNotFoundError(f"Arquivo de áudio local não encontrado: {audio_file_path}")
@@ -123,7 +122,7 @@ class TheologyMinerClient:
         target_model = model_name or settings.GOOGLE_GEMINI_MODEL or "gemini-flash-latest"
 
         logger.info(
-            "📤 Enviando áudio MP3 local para a File API do Gemini (Rota Nativa sem Colab)",
+            "📤 Enviando áudio MP3 local para a File API do Gemini",
             job_id=job_id,
             audio_file=audio_file_path.name,
             size_mb=round(audio_file_path.stat().st_size / (1024 * 1024), 2)
@@ -133,12 +132,26 @@ class TheologyMinerClient:
         try:
             # 1. Upload do MP3 para a Gemini File API
             uploaded_file = self.client.files.upload(file=str(audio_file_path))
-            logger.info("✅ Upload concluído na File API do Gemini", job_id=job_id, file_ref=uploaded_file.name)
+            logger.info("✅ Upload concluído na File API. Aguardando ativação (ACTIVE)...", job_id=job_id, file_ref=uploaded_file.name)
 
-            # Aguarda o processamento do arquivo se necessário
-            while hasattr(uploaded_file, "state") and str(uploaded_file.state.name).upper() == "PROCESSING":
-                logger.info("⏳ Aguardando indexação do áudio nos servidores do Google...", job_id=job_id)
-                time.sleep(3)
+            # 2. Polling Resiliente de Ativação do Arquivo no Google
+            start_poll = time.time()
+            while True:
+                state_str = str(getattr(uploaded_file, "state", "")).upper()
+                
+                # Se o estado contiver ACTIVE e não estiver em PROCESSING
+                if "ACTIVE" in state_str and "PROCESSING" not in state_str:
+                    logger.info("🟢 Arquivo de áudio ativado nos servidores do Google (ACTIVE)", job_id=job_id)
+                    break
+                
+                if "FAILED" in state_str or "ERROR" in state_str:
+                    raise RuntimeError(f"O arquivo de áudio falhou na indexação do Google: {state_str}")
+
+                if (time.time() - start_poll) > 600:
+                    raise TimeoutError("Tempo limite (10 min) excedido aguardando indexação do áudio na File API.")
+
+                logger.info(f"⏳ Indexando áudio nos servidores do Google (Estado: {state_str}). Aguardando 5s...", job_id=job_id)
+                time.sleep(5)
                 uploaded_file = self.client.files.get(name=uploaded_file.name)
 
             prompt_user = (
@@ -149,7 +162,7 @@ class TheologyMinerClient:
                 f"e Mid-Form (16:9) com âncoras exatas de 7 palavras consecutivas."
             )
 
-            # 2. Inferência Multimodal Nativa com Pydantic Structured Output
+            # 3. Inferência Multimodal Nativa com Pydantic Structured Output
             logger.info("🧠 Disparando mineração multimodal no Gemini 1.5 Flash", job_id=job_id, model=target_model)
             response = self.client.models.generate_content(
                 model=target_model,
@@ -187,7 +200,7 @@ class TheologyMinerClient:
             logger.error("Falha no processamento de áudio via Gemini File API", job_id=job_id, error=str(e))
             raise RuntimeError(f"Erro no processamento de áudio do Gemini: {str(e)}")
         finally:
-            # 3. Limpeza automática do arquivo temporário na File API
+            # 4. Limpeza automática do arquivo temporário na File API
             if uploaded_file and hasattr(uploaded_file, "name"):
                 try:
                     self.client.files.delete(name=uploaded_file.name)
