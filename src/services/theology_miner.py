@@ -52,23 +52,29 @@ class DecoupledTheologyMinerService:
             audio=audio_file_path.name
         )
 
-        trans_dir = Path("data/audio_podcasts/transcricoes_fase2")
-        trans_dir.mkdir(parents=True, exist_ok=True)
+        trans_dir1 = Path("data/audio_podcasts/transcricoes")
+        trans_dir2 = Path("data/audio_podcasts/transcricoes_fase2")
+        trans_dir1.mkdir(parents=True, exist_ok=True)
+        trans_dir2.mkdir(parents=True, exist_ok=True)
 
-        txt_path = trans_dir / f"{audio_file_path.stem}.txt"
-        srt_path = trans_dir / f"{audio_file_path.stem}.srt"
+        txt_path1 = trans_dir1 / f"{audio_file_path.stem}.txt"
+        txt_path2 = trans_dir2 / f"{audio_file_path.stem}.txt"
+        srt_path = trans_dir2 / f"{audio_file_path.stem}.srt"
         transcript_text = ""
 
-        # STEP 1 (FASE 2): Verifica se a transcrição local (.txt ou .srt) do Whisper Desktop existe
-        if txt_path.exists() and txt_path.stat().st_size > 50:
-            logger.info("📄 Transcrição .txt local encontrada no disco. Usando transcrição off-line.", file=txt_path.name)
-            with open(txt_path, "r", encoding="utf-8", errors="ignore") as f:
+        # STEP 1 (FASE 2): Verifica se a transcrição local (.txt ou .srt) existe nas pastas do acervo
+        if txt_path1.exists() and txt_path1.stat().st_size > 50:
+            logger.info("📄 Transcrição .txt encontrada em data/audio_podcasts/transcricoes. Usando texto off-line.", file=txt_path1.name)
+            with open(txt_path1, "r", encoding="utf-8", errors="ignore") as f:
+                transcript_text = f.read()
+        elif txt_path2.exists() and txt_path2.stat().st_size > 50:
+            logger.info("📄 Transcrição .txt encontrada em data/audio_podcasts/transcricoes_fase2. Usando texto off-line.", file=txt_path2.name)
+            with open(txt_path2, "r", encoding="utf-8", errors="ignore") as f:
                 transcript_text = f.read()
         elif srt_path.exists() and srt_path.stat().st_size > 50:
             logger.info("📄 Transcrição .srt local (Whisper Desktop) encontrada. Extraindo texto.", file=srt_path.name)
             with open(srt_path, "r", encoding="utf-8", errors="ignore") as f:
                 raw_lines = f.readlines()
-                # Remove timestamps e índices numéricos do SRT
                 text_lines = [l.strip() for l in raw_lines if l.strip() and not l.strip().isdigit() and "-->" not in l]
                 transcript_text = " ".join(text_lines)
         else:
