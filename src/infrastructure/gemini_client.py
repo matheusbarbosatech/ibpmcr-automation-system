@@ -1,9 +1,8 @@
 """
 Cliente de Mineração Teológica com Google Gemini API - IBPM CR Automation System.
 
-Utiliza o SDK novo 'google-genai' com Pydantic V2 Structured Outputs para realizar a
-mineração cognitiva de pregações, isolando Unidades de Pensamento Completo (UPC),
-métricas de retenção visual e âncoras verbais exatas de 7 palavras.
+Utiliza o SDK novo 'google-genai' com Pydantic V2 Structured Outputs e File API para realizar a
+mineração cognitiva de pregações diretamente de arquivos MP3/M4A locais ou de textos transcritos.
 """
 
 import time
@@ -22,12 +21,12 @@ logger = get_logger("TheologyMinerClient")
 
 SYSTEM_PROMPT_PENTECOSTAL = """Você é o motor de processamento cognitivo do IBPM CR AUTOMATION SYSTEM, especializado na análise exegética e mineração de conteúdo audiovisual eclesiástico pentecostal.
 
-Sua tarefa é analisar a transcrição bruta de um culto, identificar os momentos de maior impacto homilético, teológico ou emocional, e retornar uma estrutura JSON validada contendo os cortes selecionados para os formatos Short-Form (9:16) e Mid-Form (16:9).
+Sua tarefa é analisar a transcrição ou o áudio bruto de um culto, identificar os momentos de maior impacto homilético, teológico ou emocional, e retornar uma estrutura JSON validada contendo os cortes selecionados para os formatos Short-Form (9:16) e Mid-Form (16:9).
 
 DIRETRIZES DE PROCESSAMENTO:
 1. PRESERVAÇÃO TEOLÓGICA: Mantenha a fidelidade absoluta ao sentido exegético original do pregador. Não reescreva, comente ou altere a doutrina expressa no texto.
-2. IDENTIFICAÇÃO DE ÂNCORAS LITERAIS: Para cada corte identificado, você DEVE extrair exatamente 7 (sete) palavras consecutivas verbatim da transcrição bruta para a "start_anchor_7_words" (início) e exatamente 7 (sete) palavras consecutivas verbatim para a "end_anchor_7_words" (fim).
-3. PONTUAÇÃO E ORTOGRAFIA DAS ÂNCORAS: As âncoras de 7 palavras devem ser uma cópia IDÊNTICA e literal do texto bruto fornecido, para permitir a busca por casamento exato no alinhamento determinístico downstream.
+2. IDENTIFICAÇÃO DE ÂNCORAS LITERAIS: Para cada corte identificado, você DEVE extrair exatamente 7 (sete) palavras consecutivas verbatim para a "start_anchor_7_words" (início) e exatamente 7 (sete) palavras consecutivas verbatim para a "end_anchor_7_words" (fim).
+3. PONTUAÇÃO E ORTOGRAFIA DAS ÂNCORAS: As âncoras de 7 palavras devem ser uma cópia IDÊNTICA e literal do áudio/texto fornecido, para permitir a busca por casamento exato no alinhamento determinístico downstream.
 4. MÉTRICAS DE CORTE:
    - Short-Form (9:16): Duração ideal entre 30 e 59 segundos. Foco em frases de impacto, ilustrações diretas e declarações de fé.
    - Mid-Form (16:9): Duração ideal entre 3 e 12 minutos. Foco em explicações teológicas completas, exegese de passagens bíblicas ou reflexões profundas.
@@ -38,7 +37,7 @@ RETORNE EXCLUSIVAMENTE O PAYLOAD STRUCTURAL CONFORME O SCHEMA DEFINIDO.
 
 class TheologyMinerClient:
     """
-    Cliente wrapper para mineração teológica via Gemini 1.5 Flash usando Structured Outputs.
+    Cliente wrapper para mineração teológica via Gemini 1.5 Flash usando Structured Outputs e File API.
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -91,28 +90,107 @@ class TheologyMinerClient:
             if not response or not response.text:
                 raise RuntimeError("Resposta vazia retornada pela API do Gemini.")
 
-            # O SDK novo faz o parse direto para a classe Pydantic fornecida no response_schema
             if hasattr(response, "parsed") and response.parsed:
                 parsed_response: SermonMiningResponse = response.parsed
                 parsed_response.job_id = job_id
                 parsed_response.source_video_id = source_video_id
-                
-                logger.info(
-                    "Mineração teológica concluída com sucesso via SDK GenAI",
-                    job_id=job_id,
-                    short_cuts=len(parsed_response.short_form_cuts),
-                    mid_cuts=len(parsed_response.mid_form_cuts)
-                )
                 return parsed_response
 
-            # Parsing manual de fallback em caso de retorno string pura JSON
             parsed_json = SermonMiningResponse.model_validate_json(response.text)
             parsed_json.job_id = job_id
             parsed_json.source_video_id = source_video_id
-            
-            logger.info("Mineração teológica concluída com sucesso (fallback parse)", job_id=job_id)
             return parsed_json
 
         except Exception as e:
             logger.error("Falha na mineração teológica do Gemini", job_id=job_id, error=str(e))
             raise RuntimeError(f"Erro na API do Gemini: {str(e)}")
+
+    def analyze_audio_file(
+        self,
+        audio_file_path: Path,
+        source_video_id: str = "IBPM_CULTO",
+        model_name: Optional[str] = None,
+        job_id: str = "job_audio_gemini"
+    ) -> SermonMiningResponse:
+        """
+        Rota Nativa do Gemini 1.5 via File API:
+        Faz upload do MP3 local diretamente para o Gemini, ouve o áudio na nuvem do Google
+        e realiza a transcrição + mineração teológica em um único passo, sem estressar a máquina local!
+        """
+        if not audio_file_path.exists():
+            raise FileNotFoundError(f"Arquivo de áudio local não encontrado: {audio_file_path}")
+
+        target_model = model_name or settings.GOOGLE_GEMINI_MODEL or "gemini-flash-latest"
+
+        logger.info(
+            "📤 Enviando áudio MP3 local para a File API do Gemini (Rota Nativa sem Colab)",
+            job_id=job_id,
+            audio_file=audio_file_path.name,
+            size_mb=round(audio_file_path.stat().st_size / (1024 * 1024), 2)
+        )
+
+        uploaded_file = None
+        try:
+            # 1. Upload do MP3 para a Gemini File API
+            uploaded_file = self.client.files.upload(file=str(audio_file_path))
+            logger.info("✅ Upload concluído na File API do Gemini", job_id=job_id, file_ref=uploaded_file.name)
+
+            # Aguarda o processamento do arquivo se necessário
+            while hasattr(uploaded_file, "state") and str(uploaded_file.state.name).upper() == "PROCESSING":
+                logger.info("⏳ Aguardando indexação do áudio nos servidores do Google...", job_id=job_id)
+                time.sleep(3)
+                uploaded_file = self.client.files.get(name=uploaded_file.name)
+
+            prompt_user = (
+                f"{SYSTEM_PROMPT_PENTECOSTAL}\n\n"
+                f"ID do Vídeo de Origem: {source_video_id}\n\n"
+                f"Instrução: Ouça atentamente este áudio do culto da Igreja Batista Pentecostal Mundial (IBPM CR). "
+                f"Faça a transcrição analítica completa e extraia todos os cortes virais nos formatos Short-Form (9:16) "
+                f"e Mid-Form (16:9) com âncoras exatas de 7 palavras consecutivas."
+            )
+
+            # 2. Inferência Multimodal Nativa com Pydantic Structured Output
+            logger.info("🧠 Disparando mineração multimodal no Gemini 1.5 Flash", job_id=job_id, model=target_model)
+            response = self.client.models.generate_content(
+                model=target_model,
+                contents=[uploaded_file, prompt_user],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=SermonMiningResponse,
+                    temperature=0.3
+                )
+            )
+
+            time.sleep(4.5)
+
+            if not response or not response.text:
+                raise RuntimeError("Resposta vazia retornada pela API do Gemini no processamento de áudio.")
+
+            parsed_response = None
+            if hasattr(response, "parsed") and response.parsed:
+                parsed_response = response.parsed
+            else:
+                parsed_response = SermonMiningResponse.model_validate_json(response.text)
+
+            parsed_response.job_id = job_id
+            parsed_response.source_video_id = source_video_id
+
+            logger.info(
+                "🎉 Mineração e Transcrição Nativa via Áudio concluídas com sucesso!",
+                job_id=job_id,
+                short_cuts=len(parsed_response.short_form_cuts),
+                mid_cuts=len(parsed_response.mid_form_cuts)
+            )
+            return parsed_response
+
+        except Exception as e:
+            logger.error("Falha no processamento de áudio via Gemini File API", job_id=job_id, error=str(e))
+            raise RuntimeError(f"Erro no processamento de áudio do Gemini: {str(e)}")
+        finally:
+            # 3. Limpeza automática do arquivo temporário na File API
+            if uploaded_file and hasattr(uploaded_file, "name"):
+                try:
+                    self.client.files.delete(name=uploaded_file.name)
+                    logger.info("🗑️ Arquivo temporário removido da File API do Gemini", file_ref=uploaded_file.name)
+                except Exception:
+                    pass
