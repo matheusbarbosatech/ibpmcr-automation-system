@@ -63,7 +63,7 @@ st.markdown("""
         padding: 0.6rem 1.2rem;
     }
 </style>
-""", unsafe_allow_dict=True)
+""", unsafe_allow_html=True)
 
 
 # Sidebar com Status da Conexão
@@ -90,8 +90,8 @@ with st.sidebar:
 
 
 # Cabeçalho Principal
-st.markdown('<div class="main-header">🎬 IBPM CR AUTOMATION STUDIO PRO</div>', unsafe_allow_dict=True)
-st.markdown('<div class="sub-header">Plataforma Autônoma de Mineração Teológica, Reframe 9:16 e Renderização Programática</div>', unsafe_allow_dict=True)
+st.markdown('<div class="main-header">🎬 IBPM CR AUTOMATION STUDIO PRO</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Plataforma Autônoma de Mineração Teológica, Reframe 9:16 e Renderização Programática</div>', unsafe_allow_html=True)
 
 
 # Abas da Aplicação Web
