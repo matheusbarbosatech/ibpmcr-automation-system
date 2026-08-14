@@ -65,7 +65,7 @@ def main(page: ft.Page):
                         ft.Container(
                             content=ft.Text("FLUTTER 60 FPS ENGINE", size=10, weight=ft.FontWeight.BOLD, color="#00D2FF"),
                             bgcolor="#1E222B",
-                            padding=ft.padding.only(left=8, right=8, top=4, bottom=4),
+                            padding=ft.padding.Padding(8, 4, 8, 4),
                             border_radius=12
                         )
                     ],
@@ -80,7 +80,7 @@ def main(page: ft.Page):
                                 ft.Text("Gemini 1.5 Active", size=12, color="#10B981")
                             ]),
                             bgcolor="#064E3B",
-                            padding=ft.padding.only(left=10, right=10, top=5, bottom=5),
+                            padding=ft.padding.Padding(10, 5, 10, 5),
                             border_radius=8
                         ),
                         ft.Container(
@@ -89,7 +89,7 @@ def main(page: ft.Page):
                                 ft.Text("FastAPI :8000", size=12, color="#3B82F6")
                             ]),
                             bgcolor="#1E3A8A",
-                            padding=ft.padding.only(left=10, right=10, top=5, bottom=5),
+                            padding=ft.padding.Padding(10, 5, 10, 5),
                             border_radius=8
                         )
                     ],
@@ -99,7 +99,7 @@ def main(page: ft.Page):
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN
         ),
         bgcolor="#16181D",
-        padding=ft.padding.symmetric(horizontal=20, vertical=12),
+        padding=ft.padding.Padding(20, 12, 20, 12),
         border=ft.border.only(bottom=ft.BorderSide(1, "#262930"))
     )
 
@@ -190,7 +190,7 @@ def main(page: ft.Page):
                         ft.Container(
                             content=ft.Text(cut.get("category", "Hook"), size=10, weight=ft.FontWeight.BOLD, color="#D47AFF"),
                             bgcolor="#2D1A3F",
-                            padding=ft.padding.only(left=8, right=8, top=4, bottom=4),
+                            padding=ft.padding.Padding(8, 4, 8, 4),
                             border_radius=4
                         )
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
