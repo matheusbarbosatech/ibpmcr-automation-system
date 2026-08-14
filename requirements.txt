@@ -1,18 +1,34 @@
-# IBPM CR Automation System - Dependências Python (Fase 1)
+# =============================================================================
+# IBPM CR AUTOMATION SYSTEM - PRODUCTION DEPENDENCIES (PYTHON 3.11)
+# =============================================================================
 
-# API do YouTube e Scraper de Mídia
-google-api-python-client>=2.100.0
-youtube-transcript-api>=0.6.1
-yt-dlp>=2024.3.10
+# Core & Settings
+pydantic>=2.7.0,<3.0.0
+pydantic-settings>=2.2.0,<3.0.0
+python-dotenv>=1.0.1,<2.0.0
+structlog>=24.1.0,<25.0.0
 
-# Transcrição por IA em CPU (INT8)
-faster-whisper>=1.0.0
+# Async Queue & Broker (Celery & Redis)
+celery>=5.3.6,<6.0.0
+redis>=5.0.3,<6.0.0
+kombu>=5.3.5,<6.0.0
 
-# Processamento de Linguagem Natural (PLN) & Utilidades
-spacy>=3.7.0
-tqdm>=4.66.0
-requests>=2.31.0
-python-dotenv>=1.0.0
+# AI & Media Ingestion
+google-genai>=2.18.0,<3.0.0
+google-api-python-client>=2.120.0,<3.0.0
+faster-whisper>=1.0.1,<2.0.0
+yt-dlp>=2024.4.9
+groq>=0.5.0,<1.0.0
 
-# Geração de Relatórios e PDFs
-fpdf2>=2.7.8
+# String Matching & Temporal Alignment
+rapidfuzz>=3.8.0,<4.0.0
+
+# Computer Vision & Video Processing
+opencv-python>=4.9.0,<5.0.0
+mediapipe>=0.10.11,<1.0.0
+numpy>=1.26.4,<2.0.0
+
+# HTTP & Utilities
+requests>=2.31.0,<3.0.0
+httpx>=0.27.0,<1.0.0
+tqdm>=4.66.2,<5.0.0
