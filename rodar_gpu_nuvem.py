@@ -187,7 +187,61 @@ print("[IBPM CR GPU] PROCESSO CONCLUIDO COM SUCESSO!")
     logger.info("Kernel de GPU preparado com sucesso", path=str(output_kernel_dir))
 
 
-def disparar_gpu_nuvem_cli():
+def monitorar_gpu_nuvem(kernel_ref: str = "omatheusbsilva/ibpmcr-whisper-gpu", interval_sec: int = 10, auto_download: bool = True):
+    """
+    Monitora a execução da GPU na nuvem em tempo real no terminal
+    e baixa automaticamente os arquivos ao terminar.
+    """
+    import time
+    logger.info("📡 Iniciando monitoramento em tempo real da GPU na nuvem...", kernel=kernel_ref)
+
+    print("\n" + "=" * 65)
+    print(" 📡 MONITORAMENTO EM TEMPO REAL DA GPU NA NUVEM (IBPM CR)")
+    print("=" * 65)
+    print(" Aguarde... O terminal atualizará o status a cada 10 segundos.")
+    print(" Ao finalizar, as transcrições serão baixadas automaticamente!")
+    print("=" * 65 + "\n")
+
+    cmd_status = ["kaggle", "kernels", "status", kernel_ref]
+    last_status = ""
+
+    while True:
+        try:
+            res = subprocess.run(cmd_status, capture_output=True, text=True)
+            output = res.stdout.strip()
+            
+            if "RUNNING" in output:
+                curr_time = datetime.now().strftime("%H:%M:%S")
+                print(f"[{curr_time}] ⚡ Status: PROCESSANDO NA GPU (KernelWorkerStatus.RUNNING)...")
+            elif "COMPLETE" in output:
+                print(f"\n🎉 [{datetime.now().strftime('%H:%M:%S')}] STATUS: CONCLUÍDO COM SUCESSO! (KernelWorkerStatus.COMPLETE)")
+                
+                if auto_download:
+                    print("📥 Baixando transcrições geradas diretamente para 'data/audio_podcasts/transcricoes_fase2/'...")
+                    out_dir = BASE_DIR / "data" / "audio_podcasts" / "transcricoes_fase2"
+                    cmd_out = ["kaggle", "kernels", "output", kernel_ref, "-p", str(out_dir)]
+                    subprocess.run(cmd_out, check=True)
+                    print(f"✅ TODAS AS TRANSCRIÇÕES FORAM SALVAS EM '{out_dir}'!")
+                break
+            elif "ERROR" in output:
+                print(f"\n❌ [{datetime.now().strftime('%H:%M:%S')}] STATUS: ERRO NA EXECUÇÃO DA GPU (KernelWorkerStatus.ERROR)")
+                print("Tentando baixar logs de erro...")
+                cmd_out = ["kaggle", "kernels", "output", kernel_ref, "-p", "logs/kaggle_error"]
+                subprocess.run(cmd_out)
+                break
+            else:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ Status: {output}")
+
+        except KeyboardInterrupt:
+            print("\n⚠️ Monitoramento pausado pelo usuário. A GPU continua rodando na nuvem.")
+            break
+        except Exception as e:
+            print(f"⚠️ Erro ao checar status: {e}")
+
+        time.sleep(interval_sec)
+
+
+def disparar_gpu_nuvem_cli(monitor: bool = True):
     """Valida o setup e envia a execução para a GPU do Kaggle via terminal."""
     if not verificar_credencial_kaggle():
         return
@@ -203,15 +257,30 @@ def disparar_gpu_nuvem_cli():
         print("\n" + "=" * 60)
         print(" TASK ENVIADA PARA A GPU DA NUVEM COM SUCESSO!")
         print(" * A GPU T4 está transcrevendo os cultos na nuvem.")
-        print(" * Para checar o status via terminal, rode:")
-        print("   kaggle kernels status omatheusbsilva/ibpmcr-whisper-gpu")
-        print(" * Para baixar os resultados via terminal, rode:")
-        print("   kaggle kernels output omatheusbsilva/ibpmcr-whisper-gpu -p data/audio_podcasts/transcricoes_fase2")
         print("=" * 60 + "\n")
+
+        if monitor:
+            monitorar_gpu_nuvem()
+
     except subprocess.CalledProcessError as e:
         logger.error("Falha ao enviar tarefa via Kaggle CLI", stderr=e.stderr)
         print(f"❌ Erro ao enviar tarefa: {e.stderr}")
 
 
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Orquestrador CLI de GPU na Nuvem (IBPM CR)")
+    parser.add_argument("--monitor-only", action="store_true", help="Apenas monitora a tarefa em execução na GPU sem reenviar")
+    parser.add_argument("--no-monitor", action="store_true", help="Envia para a GPU sem ficar aguardando no terminal")
+
+    args = parser.parse_args()
+
+    if args.monitor_only:
+        monitorar_gpu_nuvem()
+    else:
+        disparar_gpu_nuvem_cli(monitor=not args.no_monitor)
+
+
 if __name__ == "__main__":
-    disparar_gpu_nuvem_cli()
+    from datetime import datetime
+    main()
