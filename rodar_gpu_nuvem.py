@@ -101,8 +101,17 @@ def log(msg):
 try:
     log("[IBPM CR GPU] Instalando bibliotecas no ambiente Kaggle...")
     subprocess.run(["apt-get", "update", "-qq"], check=False)
-    subprocess.run(["apt-get", "install", "-y", "-qq", "nodejs", "ffmpeg"], check=False)
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "faster-whisper", "pyexecjs", "yt-dlp"], check=False)
+    subprocess.run(["apt-get", "install", "-y", "-qq", "ffmpeg", "curl", "unzip"], check=False)
+    # Instalar Deno - runtime JS requerido pelo yt-dlp moderno
+    log("[IBPM CR GPU] Instalando Deno (JS runtime requerido pelo yt-dlp)...")
+    deno_install = subprocess.run(
+        ["sh", "-c", "curl -fsSL https://deno.land/install.sh | sh"],
+        capture_output=True, text=True, check=False
+    )
+    deno_path = "/root/.deno/bin"
+    os.environ["PATH"] = deno_path + ":" + os.environ.get("PATH", "")
+    log(f"[IBPM CR GPU] Deno instalado. PATH: {{os.environ['PATH'][:80]}}")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "faster-whisper", "yt-dlp"], check=False)
 
     import torch
     log(f"[IBPM CR GPU] PyTorch Versao: {{torch.__version__}} | CUDA Disponivel: {{torch.cuda.is_available()}}")
@@ -156,7 +165,7 @@ try:
         output_template = f"/tmp/audio_{{vid}}.%(ext)s"
         cmd_dl = [
             "yt-dlp",
-            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "--js-runtimes", f"deno:{deno_path}/deno",
             "--no-check-certificates",
             "-f", "bestaudio/best",
             "-o", output_template,
