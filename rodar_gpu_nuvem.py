@@ -189,6 +189,7 @@ try:
         output_template = f"/tmp/audio_{{vid}}.%(ext)s"
         cmd_dl = [
             "yt-dlp",
+            "--remote-components", "ejs:github",
             "--js-runtimes", "deno:/root/.deno/bin/deno",
             "--cookies", "/kaggle/working/youtube_cookies.txt",
             "--no-check-certificates",
