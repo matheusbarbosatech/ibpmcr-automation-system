@@ -52,6 +52,15 @@ def preparar_kernel_kaggle(output_kernel_dir: Path):
     """Prepara os arquivos do Kernel Kaggle com aceleração por GPU."""
     output_kernel_dir.mkdir(parents=True, exist_ok=True)
 
+    lista_file = BASE_DIR / "data" / "lista_audios_sem_transcricao.txt"
+    pendentes_list = []
+    if lista_file.exists():
+        with open(lista_file, "r", encoding="utf-8") as f:
+            for line in f:
+                l = line.strip()
+                if l and not l.startswith("#"):
+                    pendentes_list.append(l)
+
     metadata = {
         "id": "omatheusbsilva/ibpmcr-whisper-gpu",
         "title": "ibpmcr-whisper-gpu",
@@ -69,10 +78,13 @@ def preparar_kernel_kaggle(output_kernel_dir: Path):
     with open(output_kernel_dir / "kernel-metadata.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
 
-    script_content = """import os
+    pendentes_json_str = json.dumps(pendentes_list, ensure_ascii=False)
+
+    script_content = f"""import os
 import sys
 import re
 import json
+import traceback
 import subprocess
 from pathlib import Path
 
@@ -82,116 +94,110 @@ if hasattr(sys.stdout, 'reconfigure'):
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
-print("[IBPM CR GPU] Instalando dependencias na GPU do Kaggle...")
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "faster-whisper", "openai-whisper", "yt-dlp"], check=False)
-
-import torch
-device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"[IBPM CR GPU] Dispositivo GPU Ativo: {device.upper()}")
-
-model = None
-use_faster = True
+def log(msg):
+    print(msg)
+    sys.stdout.flush()
 
 try:
-    from faster_whisper import WhisperModel
-    compute_type = "float16" if device == "cuda" else "int8"
-    model = WhisperModel("large-v3", device=device, compute_type=compute_type)
-    print("[IBPM CR GPU] Modelo Faster-Whisper Large-V3 carregado com sucesso!")
-except Exception as e:
-    print(f"[IBPM CR GPU] Faster-Whisper indisponivel ({e}), usando OpenAI Whisper...")
-    import whisper
-    model = whisper.load_model("large-v3", device=device)
-    use_faster = False
-    print("[IBPM CR GPU] Modelo OpenAI Whisper Large-V3 carregado!")
+    log("[IBPM CR GPU] Instalando dependencias na GPU do Kaggle...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "faster-whisper", "openai-whisper", "yt-dlp"], check=False)
 
-# Clona o repositório oficial da IBPM CR
-if not os.path.exists("ibpmcr-automation-system"):
-    subprocess.run(["git", "clone", "https://github.com/matheusbarbosatech/ibpmcr-automation-system.git"], check=True)
+    import torch
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    log(f"[IBPM CR GPU] Dispositivo GPU Ativo: {{device.upper()}}")
 
-repo_dir = Path("ibpmcr-automation-system")
-lista_file = repo_dir / "data" / "lista_audios_sem_transcricao.txt"
-
-pendentes = []
-if lista_file.exists():
-    with open(lista_file, "r", encoding="utf-8") as f:
-        for line in f:
-            l = line.strip()
-            if l and not l.startswith("#"):
-                pendentes.append(l)
-
-print(f"[IBPM CR GPU] Total de cultos pendentes para transcrever: {len(pendentes)}")
-
-out_dir = Path("./output_transcricoes")
-out_dir.mkdir(parents=True, exist_ok=True)
-
-def extract_video_id(filename):
-    match = re.search(r'_([a-zA-Z0-9_-]{11})_', filename)
-    return match.group(1) if match else None
-
-def format_timestamp(seconds):
-    hrs = int(seconds // 3600)
-    mins = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    return f"{hrs:02d}:{mins:02d}:{secs:02d}"
-
-for idx, audio_name in enumerate(pendentes[:50], start=1):
-    vid = extract_video_id(audio_name)
-    stem = Path(audio_name).stem
-    txt_out = out_dir / f"{stem}.txt"
-    json_out = out_dir / f"{stem}.json"
-
-    if not vid:
-        continue
-
-    print(f"[{idx}/{len(pendentes)}] Baixando audio do YouTube (ID: {vid})...")
-    temp_audio = Path(f"/tmp/audio_{vid}.mp3")
-    cmd_dl = [
-        "yt-dlp",
-        "-f", "ba",
-        "-x", "--audio-format", "mp3",
-        "--audio-quality", "32k",
-        "-o", str(temp_audio),
-        f"https://www.youtube.com/watch?v={vid}"
-    ]
+    model = None
+    use_faster = True
 
     try:
-        subprocess.run(cmd_dl, capture_output=True, text=True, check=True)
+        from faster_whisper import WhisperModel
+        compute_type = "float16" if device == "cuda" else "int8"
+        model = WhisperModel("large-v3", device=device, compute_type=compute_type)
+        log("[IBPM CR GPU] Modelo Faster-Whisper Large-V3 carregado com sucesso!")
     except Exception as e:
-        print(f"Erro ao baixar audio {vid}: {e}")
-        continue
+        log(f"[IBPM CR GPU] Faster-Whisper indisponivel ({{e}}), usando OpenAI Whisper...")
+        import whisper
+        model = whisper.load_model("large-v3", device=device)
+        use_faster = False
+        log("[IBPM CR GPU] Modelo OpenAI Whisper Large-V3 carregado!")
 
-    print(f"[{idx}/{len(pendentes)}] Transcrevendo na GPU: {audio_name}...")
-    try:
-        txt_lines = []
-        seg_list = []
+    pendentes = {pendentes_json_str}
+    log(f"[IBPM CR GPU] Total de cultos pendentes a transcrever: {{len(pendentes)}}")
 
-        if use_faster:
-            segments, info = model.transcribe(str(temp_audio), language="pt", beam_size=5, vad_filter=True)
-            for seg in segments:
-                ts = format_timestamp(seg.start)
-                txt_lines.append(f"[{ts}] {seg.text.strip()}")
-                seg_list.append({"start": round(seg.start, 2), "end": round(seg.end, 2), "text": seg.text.strip()})
-        else:
-            res = model.transcribe(str(temp_audio), language="pt")
-            for seg in res.get("segments", []):
-                st = seg.get("start", 0.0)
-                txt = seg.get("text", "").strip()
-                ts = format_timestamp(st)
-                txt_lines.append(f"[{ts}] {txt}")
-                seg_list.append({"start": round(st, 2), "end": round(seg.get("end", 0.0), 2), "text": txt})
+    out_dir = Path("./output_transcricoes")
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-        with open(txt_out, "w", encoding="utf-8") as f:
-            f.write(f"TRANSCRIÇÃO WHISPER LARGE-V3 GPU\\nARQUIVO: {audio_name}\\n\\n" + "\\n".join(txt_lines))
+    def extract_video_id(filename):
+        match = re.search(r'_([a-zA-Z0-9_-]{{11}})_', filename)
+        return match.group(1) if match else None
 
-        with open(json_out, "w", encoding="utf-8") as f:
-            json.dump({"arquivo": audio_name, "video_id": vid, "segments": seg_list}, f, ensure_ascii=False, indent=2)
+    def format_timestamp(seconds):
+        hrs = int(seconds // 3600)
+        mins = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        return f"{{hrs:02d}}:{{mins:02d}}:{{secs:02d}}"
 
-        temp_audio.unlink(missing_ok=True)
-        print(f"[OK] Transcricao concluida -> {txt_out.name}")
-    except Exception as err:
-        print(f"Erro ao transcrever {audio_name}: {err}")
+    for idx, audio_name in enumerate(pendentes[:50], start=1):
+        vid = extract_video_id(audio_name)
+        stem = Path(audio_name).stem
+        txt_out = out_dir / f"{{stem}}.txt"
+        json_out = out_dir / f"{{stem}}.json"
 
-print("[IBPM CR GPU] PROCESSO CONCLUIDO COM SUCESSO!")
+        if not vid:
+            continue
+
+        log(f"[PROGRESS {{idx}}/{{len(pendentes)}}] Baixando audio do YouTube (ID: {{vid}})...")
+        temp_audio = Path(f"/tmp/audio_{{vid}}.mp3")
+        cmd_dl = [
+            "yt-dlp",
+            "-f", "ba",
+            "-x", "--audio-format", "mp3",
+            "--audio-quality", "32k",
+            "-o", str(temp_audio),
+            f"https://www.youtube.com/watch?v={{vid}}"
+        ]
+
+        try:
+            subprocess.run(cmd_dl, capture_output=True, text=True, check=True)
+        except Exception as e:
+            log(f"Erro ao baixar audio {{vid}}: {{e}}")
+            continue
+
+        log(f"[PROGRESS {{idx}}/{{len(pendentes)}}] Transcrevendo na GPU: {{audio_name}}...")
+        try:
+            txt_lines = []
+            seg_list = []
+
+            if use_faster:
+                segments, info = model.transcribe(str(temp_audio), language="pt", beam_size=5, vad_filter=True)
+                for seg in segments:
+                    ts = format_timestamp(seg.start)
+                    txt_lines.append(f"[{{ts}}] {{seg.text.strip()}}")
+                    seg_list.append({{"start": round(seg.start, 2), "end": round(seg.end, 2), "text": seg.text.strip()}})
+            else:
+                res = model.transcribe(str(temp_audio), language="pt")
+                for seg in res.get("segments", []):
+                    st = seg.get("start", 0.0)
+                    txt = seg.get("text", "").strip()
+                    ts = format_timestamp(st)
+                    txt_lines.append(f"[{{ts}}] {{txt}}")
+                    seg_list.append({{"start": round(st, 2), "end": round(seg.get("end", 0.0), 2), "text": txt}})
+
+            with open(txt_out, "w", encoding="utf-8") as f:
+                f.write(f"TRANSCRIÇÃO WHISPER LARGE-V3 GPU\\nARQUIVO: {{audio_name}}\\n\\n" + "\\n".join(txt_lines))
+
+            with open(json_out, "w", encoding="utf-8") as f:
+                json.dump({{"arquivo": audio_name, "video_id": vid, "segments": seg_list}}, f, ensure_ascii=False, indent=2)
+
+            temp_audio.unlink(missing_ok=True)
+            log(f"[OK] Transcricao concluida -> {{txt_out.name}}")
+        except Exception as err:
+            log(f"Erro ao transcrever {{audio_name}}: {{err}}")
+
+    log("[IBPM CR GPU] PROCESSO CONCLUIDO COM SUCESSO!")
+except Exception as fatal_err:
+    log(f"FATAL ERROR NO KERNEL GPU: {{fatal_err}}")
+    traceback.print_exc()
 """
 
     with open(output_kernel_dir / "script_gpu.py", "w", encoding="utf-8") as f:
@@ -227,20 +233,28 @@ def monitorar_gpu_nuvem(kernel_ref: str = "omatheusbsilva/ibpmcr-whisper-gpu", i
                 curr_time = datetime.now().strftime("%H:%M:%S")
                 print(f"[{curr_time}] ⚡ Status: PROCESSANDO NA GPU (KernelWorkerStatus.RUNNING)...")
             elif "COMPLETE" in output:
-                print(f"\n🎉 [{datetime.now().strftime('%H:%M:%S')}] STATUS: CONCLUÍDO COM SUCESSO! (KernelWorkerStatus.COMPLETE)")
+                print(f"\n[{datetime.now().strftime('%H:%M:%S')}] STATUS: CONCLUIDO COM SUCESSO! (KernelWorkerStatus.COMPLETE)")
                 
                 if auto_download:
-                    print("📥 Baixando transcrições geradas diretamente para 'data/audio_podcasts/transcricoes_fase2/'...")
+                    print("Baixando transcricoes geradas diretamente para 'data/audio_podcasts/transcricoes_fase2/'...")
                     out_dir = BASE_DIR / "data" / "audio_podcasts" / "transcricoes_fase2"
                     cmd_out = ["kaggle", "kernels", "output", kernel_ref, "-p", str(out_dir)]
-                    subprocess.run(cmd_out, check=True)
-                    print(f"✅ TODAS AS TRANSCRIÇÕES FORAM SALVAS EM '{out_dir}'!")
+                    sub_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+                    subprocess.run(cmd_out, env=sub_env, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+                    print(f"TODAS AS TRANSCRIÇOES FORAM SALVAS EM '{out_dir}'!")
                 break
             elif "ERROR" in output:
-                print(f"\n❌ [{datetime.now().strftime('%H:%M:%S')}] STATUS: ERRO NA EXECUÇÃO DA GPU (KernelWorkerStatus.ERROR)")
+                print(f"\n[{datetime.now().strftime('%H:%M:%S')}] STATUS: ERRO NA EXECUCAO DA GPU (KernelWorkerStatus.ERROR)")
                 print("Tentando baixar logs de erro...")
                 cmd_out = ["kaggle", "kernels", "output", kernel_ref, "-p", "logs/kaggle_error"]
-                subprocess.run(cmd_out)
+                sub_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+                res_err = subprocess.run(cmd_out, env=sub_env, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+                log_file = BASE_DIR / "logs" / "kaggle_error" / f"{Path(kernel_ref).name}.log"
+                if log_file.exists():
+                    print("\n--- ULTIMOS LOGS DA GPU NO KAGGLE ---")
+                    with open(log_file, "r", encoding="utf-8", errors="ignore") as lf:
+                        print(lf.read()[-1500:])
+                    print("-------------------------------------\n")
                 break
             else:
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ Status: {output}")
