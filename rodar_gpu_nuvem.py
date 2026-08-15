@@ -103,7 +103,7 @@ try:
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "faster-whisper", "yt-dlp"], check=False)
 
     import torch
-    log(f"[IBPM CR GPU] PyTorch Versao: {torch.__version__} | CUDA Disponivel: {torch.cuda.is_available()}")
+    log(f"[IBPM CR GPU] PyTorch Versao: {{torch.__version__}} | CUDA Disponivel: {{torch.cuda.is_available()}}")
 
     model = None
     use_faster = True
