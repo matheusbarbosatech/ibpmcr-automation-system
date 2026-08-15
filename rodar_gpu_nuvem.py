@@ -94,7 +94,7 @@ def log(msg):
     sys.stdout.flush()
     try:
         with open("execution_log.txt", "a", encoding="utf-8") as f:
-            f.write(str(msg) + "\n")
+            f.write(str(msg) + chr(10))
     except Exception:
         pass
 
