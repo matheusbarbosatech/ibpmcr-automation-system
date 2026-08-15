@@ -64,9 +64,9 @@ def preparar_kernel_kaggle(output_kernel_dir: Path):
     metadata = {
         "id": "omatheusbsilva/ibpmcr-whisper-gpu",
         "title": "ibpmcr-whisper-gpu",
-        "code_file": "script_gpu.py",
+        "code_file": "notebook_gpu.ipynb",
         "language": "python",
-        "kernel_type": "script",
+        "kernel_type": "notebook",
         "is_private": "true",
         "enable_gpu": "true",
         "enable_internet": "true",
@@ -80,29 +80,22 @@ def preparar_kernel_kaggle(output_kernel_dir: Path):
 
     pendentes_json_str = json.dumps(pendentes_list, ensure_ascii=False)
 
-    script_content = f"""import os
+    py_code = f"""import os
 import sys
 import re
+import glob
 import json
 import traceback
 import subprocess
 from pathlib import Path
-
-# Suporte UTF-8 no stdout
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 def log(msg):
     print(msg)
     sys.stdout.flush()
 
 try:
-    log("[IBPM CR GPU] Instalando dependencias e ffmpeg na GPU do Kaggle...")
-    subprocess.run(["apt-get", "update", "-qq"], check=False)
-    subprocess.run(["apt-get", "install", "-y", "-qq", "ffmpeg"], check=False)
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "faster-whisper", "openai-whisper", "yt-dlp"], check=False)
+    log("[IBPM CR GPU] Instalando bibliotecas no ambiente GPU do Kaggle...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "faster-whisper", "openai-whisper", "yt-dlp"], check=False)
 
     import torch
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -144,25 +137,32 @@ try:
         txt_out = out_dir / f"{{stem}}.txt"
         json_out = out_dir / f"{{stem}}.json"
 
-        if not vid:
+        if not vid or txt_out.exists():
             continue
 
         log(f"[PROGRESS {{idx}}/{{len(pendentes)}}] Baixando audio do YouTube (ID: {{vid}})...")
-        temp_audio = Path(f"/tmp/audio_{{vid}}.m4a")
+        output_template = f"/tmp/audio_{{vid}}.%(ext)s"
         cmd_dl = [
             "yt-dlp",
-            "-f", "ba[ext=m4a]/ba",
-            "-o", str(temp_audio),
+            "-f", "ba",
+            "-o", output_template,
             f"https://www.youtube.com/watch?v={{vid}}"
         ]
 
         try:
-            subprocess.run(cmd_dl, capture_output=True, text=True, check=True)
+            res_dl = subprocess.run(cmd_dl, capture_output=True, text=True, check=True)
         except Exception as e:
             log(f"Erro ao baixar audio {{vid}}: {{e}}")
             continue
 
-        log(f"[PROGRESS {{idx}}/{{len(pendentes)}}] Transcrevendo na GPU: {{audio_name}}...")
+        # Encontra o arquivo de áudio baixado (.m4a, .webm, .opus)
+        matches = glob.glob(f"/tmp/audio_{{vid}}.*")
+        if not matches:
+            log(f"Nenhum arquivo encontrado para {{vid}} em /tmp/")
+            continue
+
+        temp_audio = Path(matches[0])
+        log(f"[PROGRESS {{idx}}/{{len(pendentes)}}] Transcrevendo na GPU ({{temp_audio.name}}): {{audio_name}}...")
         try:
             txt_lines = []
             seg_list = []
@@ -189,7 +189,7 @@ try:
                 json.dump({{"arquivo": audio_name, "video_id": vid, "segments": seg_list}}, f, ensure_ascii=False, indent=2)
 
             temp_audio.unlink(missing_ok=True)
-            log(f"[OK] Transcricao concluida -> {{txt_out.name}}")
+            log(f"[OK {{idx}}/{{len(pendentes)}}] Transcricao concluida -> {{txt_out.name}}")
         except Exception as err:
             log(f"Erro ao transcrever {{audio_name}}: {{err}}")
 
@@ -199,10 +199,29 @@ except Exception as fatal_err:
     traceback.print_exc()
 """
 
-    with open(output_kernel_dir / "script_gpu.py", "w", encoding="utf-8") as f:
-        f.write(script_content)
+    notebook_data = {
+        "cells": [
+            {
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+                "source": [py_code]
+            }
+        ],
+        "metadata": {
+            "language_info": {
+                "name": "python"
+            }
+        },
+        "nbformat": 4,
+        "nbformat_minor": 2
+    }
 
-    logger.info("Kernel de GPU preparado com sucesso", path=str(output_kernel_dir))
+    with open(output_kernel_dir / "notebook_gpu.ipynb", "w", encoding="utf-8") as f:
+        json.dump(notebook_data, f, indent=2)
+
+    logger.info("Kernel de GPU preparado como Notebook (.ipynb) com sucesso", path=str(output_kernel_dir))
 
 
 def monitorar_gpu_nuvem(kernel_ref: str = "omatheusbsilva/ibpmcr-whisper-gpu", interval_sec: int = 10, auto_download: bool = True):
