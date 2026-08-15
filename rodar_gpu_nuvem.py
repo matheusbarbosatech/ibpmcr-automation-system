@@ -99,27 +99,32 @@ def log(msg):
         pass
 
 try:
-    log("[IBPM CR GPU] Instalando bibliotecas no ambiente GPU do Kaggle...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "faster-whisper", "openai-whisper", "yt-dlp"], check=False)
+    log("[IBPM CR GPU] Instalando bibliotecas sem alterar PyTorch...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "faster-whisper", "yt-dlp"], check=False)
 
     import torch
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    log(f"[IBPM CR GPU] Dispositivo GPU Ativo: {{device.upper()}}")
+    log(f"[IBPM CR GPU] PyTorch Versao: {torch.__version__} | CUDA Disponivel: {torch.cuda.is_available()}")
 
     model = None
     use_faster = True
 
     try:
         from faster_whisper import WhisperModel
-        compute_type = "float16" if device == "cuda" else "int8"
-        model = WhisperModel("large-v3", device=device, compute_type=compute_type)
-        log("[IBPM CR GPU] Modelo Faster-Whisper Large-V3 carregado com sucesso!")
-    except Exception as e:
-        log(f"[IBPM CR GPU] Faster-Whisper indisponivel ({{e}}), usando OpenAI Whisper...")
-        import whisper
-        model = whisper.load_model("large-v3", device=device)
-        use_faster = False
-        log("[IBPM CR GPU] Modelo OpenAI Whisper Large-V3 carregado!")
+        log("[IBPM CR GPU] Tentando inicializar Faster-Whisper Large-V3 em CUDA (float16)...")
+        model = WhisperModel("large-v3", device="cuda", compute_type="float16")
+        log("[IBPM CR GPU] Modelo Faster-Whisper Large-V3 GPU ativado com sucesso!")
+    except Exception as e_cuda:
+        log(f"[IBPM CR GPU] Falha ao carregar CUDA ({e_cuda}). Ativando CTranslate2 CPU (int8 4-threads)...")
+        try:
+            from faster_whisper import WhisperModel
+            model = WhisperModel("large-v3", device="cpu", compute_type="int8", cpu_threads=4)
+            log("[IBPM CR GPU] Modelo Faster-Whisper CPU INT8 ativado!")
+        except Exception as e_cpu:
+            log(f"[IBPM CR GPU] Falha no CTranslate2 CPU ({e_cpu}), carregando OpenAI Whisper...")
+            import whisper
+            model = whisper.load_model("large-v3", device="cpu")
+            use_faster = False
+            log("[IBPM CR GPU] Modelo OpenAI Whisper CPU carregado!")
 
     pendentes = {pendentes_json_str}
     log(f"[IBPM CR GPU] Total de cultos pendentes a transcrever: {{len(pendentes)}}")
