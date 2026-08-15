@@ -82,20 +82,29 @@ if hasattr(sys.stdout, 'reconfigure'):
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
-print("[IBPM CR GPU] Instalando bibliotecas Faster-Whisper e yt-dlp...")
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "faster-whisper", "yt-dlp"], check=True)
+print("[IBPM CR GPU] Instalando dependencias na GPU do Kaggle...")
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "faster-whisper", "openai-whisper", "yt-dlp"], check=False)
 
 import torch
-from faster_whisper import WhisperModel
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
-compute_type = "float16" if device == "cuda" else "int8"
-print(f"[IBPM CR GPU] Dispositivo GPU Ativo: {device.upper()} ({compute_type})")
+print(f"[IBPM CR GPU] Dispositivo GPU Ativo: {device.upper()}")
 
-model = WhisperModel("large-v3", device=device, compute_type=compute_type)
-print("[IBPM CR GPU] Modelo Faster-Whisper Large-V3 carregado com sucesso!")
+model = None
+use_faster = True
 
-# Clona os scripts do repositório
+try:
+    from faster_whisper import WhisperModel
+    compute_type = "float16" if device == "cuda" else "int8"
+    model = WhisperModel("large-v3", device=device, compute_type=compute_type)
+    print("[IBPM CR GPU] Modelo Faster-Whisper Large-V3 carregado com sucesso!")
+except Exception as e:
+    print(f"[IBPM CR GPU] Faster-Whisper indisponivel ({e}), usando OpenAI Whisper...")
+    import whisper
+    model = whisper.load_model("large-v3", device=device)
+    use_faster = False
+    print("[IBPM CR GPU] Modelo OpenAI Whisper Large-V3 carregado!")
+
+# Clona o repositório oficial da IBPM CR
 if not os.path.exists("ibpmcr-automation-system"):
     subprocess.run(["git", "clone", "https://github.com/matheusbarbosatech/ibpmcr-automation-system.git"], check=True)
 
@@ -153,19 +162,23 @@ for idx, audio_name in enumerate(pendentes[:50], start=1):
 
     print(f"[{idx}/{len(pendentes)}] Transcrevendo na GPU: {audio_name}...")
     try:
-        segments, info = model.transcribe(
-            str(temp_audio),
-            language="pt",
-            beam_size=5,
-            vad_filter=True
-        )
-
         txt_lines = []
         seg_list = []
-        for seg in segments:
-            ts = format_timestamp(seg.start)
-            txt_lines.append(f"[{ts}] {seg.text.strip()}")
-            seg_list.append({"start": round(seg.start, 2), "end": round(seg.end, 2), "text": seg.text.strip()})
+
+        if use_faster:
+            segments, info = model.transcribe(str(temp_audio), language="pt", beam_size=5, vad_filter=True)
+            for seg in segments:
+                ts = format_timestamp(seg.start)
+                txt_lines.append(f"[{ts}] {seg.text.strip()}")
+                seg_list.append({"start": round(seg.start, 2), "end": round(seg.end, 2), "text": seg.text.strip()})
+        else:
+            res = model.transcribe(str(temp_audio), language="pt")
+            for seg in res.get("segments", []):
+                st = seg.get("start", 0.0)
+                txt = seg.get("text", "").strip()
+                ts = format_timestamp(st)
+                txt_lines.append(f"[{ts}] {txt}")
+                seg_list.append({"start": round(st, 2), "end": round(seg.get("end", 0.0), 2), "text": txt})
 
         with open(txt_out, "w", encoding="utf-8") as f:
             f.write(f"TRANSCRIÇÃO WHISPER LARGE-V3 GPU\\nARQUIVO: {audio_name}\\n\\n" + "\\n".join(txt_lines))
