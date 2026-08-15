@@ -99,7 +99,9 @@ def log(msg):
     sys.stdout.flush()
 
 try:
-    log("[IBPM CR GPU] Instalando dependencias na GPU do Kaggle...")
+    log("[IBPM CR GPU] Instalando dependencias e ffmpeg na GPU do Kaggle...")
+    subprocess.run(["apt-get", "update", "-qq"], check=False)
+    subprocess.run(["apt-get", "install", "-y", "-qq", "ffmpeg"], check=False)
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "faster-whisper", "openai-whisper", "yt-dlp"], check=False)
 
     import torch
@@ -146,12 +148,10 @@ try:
             continue
 
         log(f"[PROGRESS {{idx}}/{{len(pendentes)}}] Baixando audio do YouTube (ID: {{vid}})...")
-        temp_audio = Path(f"/tmp/audio_{{vid}}.mp3")
+        temp_audio = Path(f"/tmp/audio_{{vid}}.m4a")
         cmd_dl = [
             "yt-dlp",
-            "-f", "ba",
-            "-x", "--audio-format", "mp3",
-            "--audio-quality", "32k",
+            "-f", "ba[ext=m4a]/ba",
             "-o", str(temp_audio),
             f"https://www.youtube.com/watch?v={{vid}}"
         ]
