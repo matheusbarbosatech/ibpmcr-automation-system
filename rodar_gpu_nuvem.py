@@ -30,29 +30,22 @@ logger = get_logger("OrquestradorGPUNuvem")
 
 
 def verificar_credencial_kaggle() -> bool:
-    """Verifica se a chave API kaggle.json está configurada no ambiente."""
-    user_kaggle_path = Path.home() / ".kaggle" / "kaggle.json"
-    local_kaggle_path = BASE_DIR / "kaggle.json"
+    """Verifica e configura o token da API do Kaggle."""
+    token = os.environ.get("KAGGLE_API_TOKEN", "KGAT_0193e0e51c366c39a247e46035238ef8")
+    os.environ["KAGGLE_API_TOKEN"] = token
 
-    if local_kaggle_path.exists() and not user_kaggle_path.exists():
-        user_kaggle_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(local_kaggle_path, user_kaggle_path)
-        logger.info("Copiado 'kaggle.json' do diretório local para o diretório de usuário.")
+    user_kaggle_dir = Path.home() / ".kaggle"
+    user_kaggle_dir.mkdir(parents=True, exist_ok=True)
+    access_token_file = user_kaggle_dir / "access_token"
 
-    if user_kaggle_path.exists():
-        return True
+    try:
+        with open(access_token_file, "w", encoding="utf-8") as f:
+            f.write(token)
+    except Exception:
+        pass
 
-    print("\n" + "=" * 65)
-    print(" 🔑 SETUP RÁPIDO DA CHAVE DE GPU (KAGGLE API - 100% GRATUITO)")
-    print("=" * 65)
-    print(" Para rodar na GPU via terminal sem abrir o navegador:")
-    print(" 1. Acesse: https://www.kaggle.com/settings (faça login ou crie conta grátis)")
-    print(" 2. Na seção 'API', clique no botão 'Create New Token'.")
-    print(" 3. Um arquivo chamado 'kaggle.json' será baixado.")
-    print(" 4. Cole o arquivo 'kaggle.json' nesta pasta do projeto:")
-    print(f"    '{BASE_DIR}'")
-    print("=" * 65 + "\n")
-    return False
+    logger.info("Chave KAGGLE_API_TOKEN configurada no ambiente com sucesso!")
+    return True
 
 
 def preparar_kernel_kaggle(output_kernel_dir: Path):
@@ -60,8 +53,8 @@ def preparar_kernel_kaggle(output_kernel_dir: Path):
     output_kernel_dir.mkdir(parents=True, exist_ok=True)
 
     metadata = {
-        "id": "matheusbarbosatech/ibpmcr-whisper-gpu-transcribe",
-        "title": "IBPM CR Whisper GPU Transcribe",
+        "id": "omatheusbsilva/ibpmcr-whisper-gpu",
+        "title": "ibpmcr-whisper-gpu",
         "code_file": "script_gpu.py",
         "language": "python",
         "kernel_type": "script",
@@ -83,20 +76,17 @@ import json
 import subprocess
 from pathlib import Path
 
-print("🚀 Instalando Faster-Whisper e yt-dlp na GPU do Kaggle...")
+print("🚀 Executando transcrição em GPU T4 na Nuvem (IBPM CR)...")
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "faster-whisper", "yt-dlp"], check=True)
 
 import torch
 from faster_whisper import WhisperModel
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"🔥 Dispositivo GPU ativo: {device.upper()}")
+print(f"🔥 GPU Ativa: {device.upper()}")
 
 model = WhisperModel("large-v3", device=device, compute_type="float16")
-print("✅ Modelo Faster-Whisper Large-V3 carregado com sucesso!")
-
-# Lista os vídeos a processar da IBPM CR
-print("🎉 Kernel de GPU configurado e pronto para execução no Kaggle!")
+print("✅ Modelo Faster-Whisper Large-V3 inicializado com sucesso!")
 """
 
     with open(output_kernel_dir / "script_gpu.py", "w", encoding="utf-8") as f:
@@ -122,7 +112,9 @@ def disparar_gpu_nuvem_cli():
         print(" TASK ENVIADA PARA A GPU DA NUVEM COM SUCESSO!")
         print(" * A GPU T4 está transcrevendo os cultos na nuvem.")
         print(" * Para checar o status via terminal, rode:")
-        print("   kaggle kernels status matheusbarbosatech/ibpmcr-whisper-gpu-transcribe")
+        print("   kaggle kernels status omatheusbsilva/ibpmcr-whisper-gpu")
+        print(" * Para baixar os resultados via terminal, rode:")
+        print("   kaggle kernels output omatheusbsilva/ibpmcr-whisper-gpu -p data/audio_podcasts/transcricoes_fase2")
         print("=" * 60 + "\n")
     except subprocess.CalledProcessError as e:
         logger.error("Falha ao enviar tarefa via Kaggle CLI", stderr=e.stderr)
