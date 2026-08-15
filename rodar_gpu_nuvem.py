@@ -114,13 +114,13 @@ try:
         model = WhisperModel("large-v3", device="cuda", compute_type="float16")
         log("[IBPM CR GPU] Modelo Faster-Whisper Large-V3 GPU ativado com sucesso!")
     except Exception as e_cuda:
-        log(f"[IBPM CR GPU] Falha ao carregar CUDA ({e_cuda}). Ativando CTranslate2 CPU (int8 4-threads)...")
+        log(f"[IBPM CR GPU] Falha ao carregar CUDA ({{e_cuda}}). Ativando CTranslate2 CPU (int8 4-threads)...")
         try:
             from faster_whisper import WhisperModel
             model = WhisperModel("large-v3", device="cpu", compute_type="int8", cpu_threads=4)
             log("[IBPM CR GPU] Modelo Faster-Whisper CPU INT8 ativado!")
         except Exception as e_cpu:
-            log(f"[IBPM CR GPU] Falha no CTranslate2 CPU ({e_cpu}), carregando OpenAI Whisper...")
+            log(f"[IBPM CR GPU] Falha no CTranslate2 CPU ({{e_cpu}}), carregando OpenAI Whisper...")
             import whisper
             model = whisper.load_model("large-v3", device="cpu")
             use_faster = False
