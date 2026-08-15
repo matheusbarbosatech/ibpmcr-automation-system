@@ -165,7 +165,7 @@ try:
         output_template = f"/tmp/audio_{{vid}}.%(ext)s"
         cmd_dl = [
             "yt-dlp",
-            "--js-runtimes", f"deno:{deno_path}/deno",
+            "--js-runtimes", "deno:/root/.deno/bin/deno",
             "--no-check-certificates",
             "-f", "bestaudio/best",
             "-o", output_template,
