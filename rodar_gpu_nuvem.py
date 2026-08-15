@@ -99,10 +99,10 @@ def log(msg):
         pass
 
 try:
-    log("[IBPM CR GPU] Instalando Node.js (JS Runtime), ffmpeg e bibliotecas no ambiente Kaggle...")
+    log("[IBPM CR GPU] Instalando bibliotecas no ambiente Kaggle...")
     subprocess.run(["apt-get", "update", "-qq"], check=False)
     subprocess.run(["apt-get", "install", "-y", "-qq", "nodejs", "ffmpeg"], check=False)
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "faster-whisper", "git+https://github.com/yt-dlp/yt-dlp.git"], check=False)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "faster-whisper", "pyexecjs", "yt-dlp"], check=False)
 
     import torch
     log(f"[IBPM CR GPU] PyTorch Versao: {{torch.__version__}} | CUDA Disponivel: {{torch.cuda.is_available()}}")
@@ -112,8 +112,8 @@ try:
 
     try:
         from faster_whisper import WhisperModel
-        log("[IBPM CR GPU] Tentando inicializar Faster-Whisper Large-V3 em CUDA (float16)...")
-        model = WhisperModel("large-v3", device="cuda", compute_type="float16")
+        log("[IBPM CR GPU] Inicializando Faster-Whisper Large-V3 em CUDA (float32)...")
+        model = WhisperModel("large-v3", device="cuda", compute_type="float32")
         log("[IBPM CR GPU] Modelo Faster-Whisper Large-V3 GPU ativado com sucesso!")
     except Exception as e_cuda:
         log(f"[IBPM CR GPU] Falha ao carregar CUDA ({{e_cuda}}). Ativando CTranslate2 CPU (int8 4-threads)...")
@@ -156,9 +156,9 @@ try:
         output_template = f"/tmp/audio_{{vid}}.%(ext)s"
         cmd_dl = [
             "yt-dlp",
-            "--extractor-args", "youtube:player_client=mweb,ios",
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "--no-check-certificates",
-            "-f", "ba/b",
+            "-f", "bestaudio/best",
             "-o", output_template,
             f"https://www.youtube.com/watch?v={{vid}}"
         ]
