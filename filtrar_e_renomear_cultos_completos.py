@@ -1,4 +1,4 @@
-﻿"""
+"""
 filtrar_e_renomear_cultos_completos.py
 ======================================
 Filtra e limpa a base de dados do IBPM CR:
@@ -137,14 +137,18 @@ def main():
             media_f.unlink(missing_ok=True)
         print(f"   [DELETADO] {f.name} ({dur_min:.1f} min)")
 
-    # 2. Renomear sequencialmente os cultos válidos
+    # 2. Renomear sequencialmente os cultos válidos e sincronizar mídias em AUDIOS_DIR
     print(f"\n2. Renomeando {len(cultos_validos)} cultos válidos de 001 a {len(cultos_validos):03d}...")
 
-    # Usamos uma pasta temporária para evitar colisão de nomes durante a renomeação
+    # Mapeamento VID -> Novo Nome para mídias
+    vid_to_new_name = {}
+
     temp_trans = TRANS_DIR / "_temp_renaming"
     temp_insights = INSIGHTS_DIR / "_temp_renaming"
+    temp_media = AUDIOS_DIR / "_temp_renaming"
     temp_trans.mkdir(exist_ok=True)
     temp_insights.mkdir(exist_ok=True)
+    temp_media.mkdir(exist_ok=True)
 
     novas_transcricoes = []
 
@@ -152,6 +156,10 @@ def main():
         stem_limpo = clean_stem(f.stem)
         novo_stem = f"{idx:03d}_{stem_limpo}"
         novo_txt_name = f"{novo_stem}.txt"
+
+        vid = extract_vid(f.stem)
+        if vid:
+            vid_to_new_name[vid] = novo_stem
 
         # Mover transcricao para pasta temp com novo nome
         novo_txt_temp = temp_trans / novo_txt_name
@@ -165,6 +173,21 @@ def main():
 
         novas_transcricoes.append(novo_txt_name)
 
+    # Processar mídias em AUDIOS_DIR (.webm, .m4a, .mp3, .mp4)
+    media_files = [m for m in AUDIOS_DIR.iterdir() if m.is_file() and m.suffix in ['.webm', '.m4a', '.mp3', '.mp4']]
+    media_renomeadas = 0
+    media_deletadas = 0
+
+    for m in media_files:
+        vid = extract_vid(m.name)
+        if vid and vid in vid_to_new_name:
+            target_name = f"{vid_to_new_name[vid]}{m.suffix}"
+            shutil.move(str(m), str(temp_media / target_name))
+            media_renomeadas += 1
+        else:
+            m.unlink()
+            media_deletadas += 1
+
     # Mover de volta da pasta temp para a pasta principal
     for tmp_f in temp_trans.glob("*.txt"):
         shutil.move(str(tmp_f), str(TRANS_DIR / tmp_f.name))
@@ -174,7 +197,13 @@ def main():
         shutil.move(str(tmp_f), str(INSIGHTS_DIR / tmp_f.name))
     temp_insights.rmdir()
 
-    print(f"✅ Renomeação concluída! {len(novas_transcricoes)} cultos organizados de 001 a {len(novas_transcricoes):03d}.")
+    for tmp_f in temp_media.iterdir():
+        if tmp_f.is_file():
+            shutil.move(str(tmp_f), str(AUDIOS_DIR / tmp_f.name))
+    temp_media.rmdir()
+
+    print(f"✅ Renomeação concluída! {len(novas_transcricoes)} transcrições e {media_renomeadas} mídias organizadas (001 a {len(novas_transcricoes):03d}).")
+    print(f"🗑️  {media_deletadas} mídias não-culto excluídas de data/audio_podcasts/.")
 
     # 3. Limpar relatorio_cortes.csv para forçar regeneração na Fase 3 v2
     if RELATORIO_CSV.exists():
