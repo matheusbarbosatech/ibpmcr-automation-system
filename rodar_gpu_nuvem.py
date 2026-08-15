@@ -80,6 +80,19 @@ def preparar_kernel_kaggle(output_kernel_dir: Path):
 
     pendentes_json_str = json.dumps(pendentes_list, ensure_ascii=False)
 
+    # Carregar e comprimir cookies do YouTube (apenas linhas youtube.com)
+    import base64, zlib
+    cookies_b64 = ""
+    cookies_file = BASE_DIR / "data" / "youtube_cookies.txt"
+    if cookies_file.exists():
+        raw = cookies_file.read_text(encoding="utf-8", errors="ignore")
+        linhas = [l for l in raw.split("\n") if "youtube.com" in l.lower() or l.startswith("# Netscape") or l.startswith("# HTTP")]
+        filtered = "\n".join(linhas)
+        cookies_b64 = base64.b64encode(zlib.compress(filtered.encode("utf-8"), level=9)).decode("ascii")
+        logger.info(f"Cookies YouTube: {len(linhas)} linhas, {len(cookies_b64)} chars base64")
+    else:
+        logger.warning("Arquivo youtube_cookies.txt nao encontrado - videos bot-bloqueados podem falhar")
+
     py_code = f"""import os
 import sys
 import re
@@ -99,6 +112,17 @@ def log(msg):
         pass
 
 try:
+    log("[IBPM CR GPU] Gravando cookies do YouTube no ambiente Kaggle...")
+    import base64 as _b64, zlib as _zlib
+    _cookies_b64 = "{cookies_b64}"
+    if _cookies_b64.strip():
+        _cookies_raw = _zlib.decompress(_b64.b64decode(_cookies_b64)).decode("utf-8")
+        with open("/kaggle/working/youtube_cookies.txt", "w", encoding="utf-8") as _cf:
+            _cf.write(_cookies_raw)
+        log(f"[IBPM CR GPU] Cookies YouTube salvos: {{len(_cookies_raw.split(chr(10)))}} linhas")
+    else:
+        log("[IBPM CR GPU] Cookies nao disponíveis - downloads de videos bloqueados podem falhar")
+
     log("[IBPM CR GPU] Instalando bibliotecas no ambiente Kaggle...")
     subprocess.run(["apt-get", "update", "-qq"], check=False)
     subprocess.run(["apt-get", "install", "-y", "-qq", "ffmpeg", "curl", "unzip"], check=False)
@@ -152,7 +176,7 @@ try:
         secs = int(seconds % 60)
         return f"{{hrs:02d}}:{{mins:02d}}:{{secs:02d}}"
 
-    for idx, audio_name in enumerate(pendentes[:50], start=1):
+    for idx, audio_name in enumerate(pendentes[:100], start=1):
         vid = extract_video_id(audio_name)
         stem = Path(audio_name).stem
         txt_out = out_dir / f"{{stem}}.txt"
@@ -166,6 +190,7 @@ try:
         cmd_dl = [
             "yt-dlp",
             "--js-runtimes", "deno:/root/.deno/bin/deno",
+            "--cookies", "/kaggle/working/youtube_cookies.txt",
             "--no-check-certificates",
             "-f", "bestaudio/best",
             "-o", output_template,
