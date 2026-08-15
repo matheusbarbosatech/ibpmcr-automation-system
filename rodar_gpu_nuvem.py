@@ -99,7 +99,9 @@ def log(msg):
         pass
 
 try:
-    log("[IBPM CR GPU] Instalando bibliotecas e yt-dlp (master) no ambiente Kaggle...")
+    log("[IBPM CR GPU] Instalando Node.js (JS Runtime), ffmpeg e bibliotecas no ambiente Kaggle...")
+    subprocess.run(["apt-get", "update", "-qq"], check=False)
+    subprocess.run(["apt-get", "install", "-y", "-qq", "nodejs", "ffmpeg"], check=False)
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "faster-whisper", "git+https://github.com/yt-dlp/yt-dlp.git"], check=False)
 
     import torch
