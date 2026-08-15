@@ -124,8 +124,7 @@ try:
     pendentes = {pendentes_json_str}
     log(f"[IBPM CR GPU] Total de cultos pendentes a transcrever: {{len(pendentes)}}")
 
-    out_dir = Path("./output_transcricoes")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(".")
 
     def extract_video_id(filename):
         match = re.search(r'_([a-zA-Z0-9_-]{{11}})_', filename)
