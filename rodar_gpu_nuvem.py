@@ -92,6 +92,11 @@ from pathlib import Path
 def log(msg):
     print(msg)
     sys.stdout.flush()
+    try:
+        with open("execution_log.txt", "a", encoding="utf-8") as f:
+            f.write(str(msg) + "\n")
+    except Exception:
+        pass
 
 try:
     log("[IBPM CR GPU] Instalando bibliotecas no ambiente GPU do Kaggle...")
@@ -144,6 +149,8 @@ try:
         output_template = f"/tmp/audio_{{vid}}.%(ext)s"
         cmd_dl = [
             "yt-dlp",
+            "--extractor-args", "youtube:player_client=android,web",
+            "--no-check-certificates",
             "-f", "ba",
             "-o", output_template,
             f"https://www.youtube.com/watch?v={{vid}}"
@@ -153,6 +160,8 @@ try:
             res_dl = subprocess.run(cmd_dl, capture_output=True, text=True, check=True)
         except Exception as e:
             log(f"Erro ao baixar audio {{vid}}: {{e}}")
+            if hasattr(e, 'stderr') and e.stderr:
+                log(f"yt-dlp stderr: {{e.stderr[:300]}}")
             continue
 
         # Encontra o arquivo de áudio baixado (.m4a, .webm, .opus)
@@ -265,6 +274,13 @@ def monitorar_gpu_nuvem(kernel_ref: str = "omatheusbsilva/ibpmcr-whisper-gpu", i
                     sub_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
                     subprocess.run(cmd_out, env=sub_env, capture_output=True, text=True, encoding="utf-8", errors="ignore")
                     print(f"TODAS AS TRANSCRIÇOES FORAM SALVAS EM '{out_dir}'!")
+                    
+                    exec_log_file = out_dir / "execution_log.txt"
+                    if exec_log_file.exists():
+                        print("\n--- LOG DE EXECUÇÃO DA GPU (ÚLTIMAS LINHAS) ---")
+                        with open(exec_log_file, "r", encoding="utf-8", errors="ignore") as elf:
+                            print(elf.read()[-1500:])
+                        print("--------------------------------------------------\n")
                 break
             elif "ERROR" in output:
                 print(f"\n[{datetime.now().strftime('%H:%M:%S')}] STATUS: ERRO NA EXECUCAO DA GPU (KernelWorkerStatus.ERROR)")
