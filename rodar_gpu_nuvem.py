@@ -76,17 +76,109 @@ import json
 import subprocess
 from pathlib import Path
 
-print("🚀 Executando transcrição em GPU T4 na Nuvem (IBPM CR)...")
+# Suporte UTF-8 no stdout
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+print("[IBPM CR GPU] Instalando bibliotecas Faster-Whisper e yt-dlp...")
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "faster-whisper", "yt-dlp"], check=True)
 
 import torch
 from faster_whisper import WhisperModel
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"🔥 GPU Ativa: {device.upper()}")
+compute_type = "float16" if device == "cuda" else "int8"
+print(f"[IBPM CR GPU] Dispositivo GPU Ativo: {device.upper()} ({compute_type})")
 
-model = WhisperModel("large-v3", device=device, compute_type="float16")
-print("✅ Modelo Faster-Whisper Large-V3 inicializado com sucesso!")
+model = WhisperModel("large-v3", device=device, compute_type=compute_type)
+print("[IBPM CR GPU] Modelo Faster-Whisper Large-V3 carregado com sucesso!")
+
+# Clona os scripts do repositório
+if not os.path.exists("ibpmcr-automation-system"):
+    subprocess.run(["git", "clone", "https://github.com/matheusbarbosatech/ibpmcr-automation-system.git"], check=True)
+
+repo_dir = Path("ibpmcr-automation-system")
+lista_file = repo_dir / "data" / "lista_audios_sem_transcricao.txt"
+
+pendentes = []
+if lista_file.exists():
+    with open(lista_file, "r", encoding="utf-8") as f:
+        for line in f:
+            l = line.strip()
+            if l and not l.startswith("#"):
+                pendentes.append(l)
+
+print(f"[IBPM CR GPU] Total de cultos pendentes para transcrever: {len(pendentes)}")
+
+out_dir = Path("./output_transcricoes")
+out_dir.mkdir(parents=True, exist_ok=True)
+
+def extract_video_id(filename):
+    match = re.search(r'_([a-zA-Z0-9_-]{11})_', filename)
+    return match.group(1) if match else None
+
+def format_timestamp(seconds):
+    hrs = int(seconds // 3600)
+    mins = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    return f"{hrs:02d}:{mins:02d}:{secs:02d}"
+
+for idx, audio_name in enumerate(pendentes[:50], start=1):
+    vid = extract_video_id(audio_name)
+    stem = Path(audio_name).stem
+    txt_out = out_dir / f"{stem}.txt"
+    json_out = out_dir / f"{stem}.json"
+
+    if not vid:
+        continue
+
+    print(f"[{idx}/{len(pendentes)}] Baixando audio do YouTube (ID: {vid})...")
+    temp_audio = Path(f"/tmp/audio_{vid}.mp3")
+    cmd_dl = [
+        "yt-dlp",
+        "-f", "ba",
+        "-x", "--audio-format", "mp3",
+        "--audio-quality", "32k",
+        "-o", str(temp_audio),
+        f"https://www.youtube.com/watch?v={vid}"
+    ]
+
+    try:
+        subprocess.run(cmd_dl, capture_output=True, text=True, check=True)
+    except Exception as e:
+        print(f"Erro ao baixar audio {vid}: {e}")
+        continue
+
+    print(f"[{idx}/{len(pendentes)}] Transcrevendo na GPU: {audio_name}...")
+    try:
+        segments, info = model.transcribe(
+            str(temp_audio),
+            language="pt",
+            beam_size=5,
+            vad_filter=True
+        )
+
+        txt_lines = []
+        seg_list = []
+        for seg in segments:
+            ts = format_timestamp(seg.start)
+            txt_lines.append(f"[{ts}] {seg.text.strip()}")
+            seg_list.append({"start": round(seg.start, 2), "end": round(seg.end, 2), "text": seg.text.strip()})
+
+        with open(txt_out, "w", encoding="utf-8") as f:
+            f.write(f"TRANSCRIÇÃO WHISPER LARGE-V3 GPU\\nARQUIVO: {audio_name}\\n\\n" + "\\n".join(txt_lines))
+
+        with open(json_out, "w", encoding="utf-8") as f:
+            json.dump({"arquivo": audio_name, "video_id": vid, "segments": seg_list}, f, ensure_ascii=False, indent=2)
+
+        temp_audio.unlink(missing_ok=True)
+        print(f"[OK] Transcricao concluida -> {txt_out.name}")
+    except Exception as err:
+        print(f"Erro ao transcrever {audio_name}: {err}")
+
+print("[IBPM CR GPU] PROCESSO CONCLUIDO COM SUCESSO!")
 """
 
     with open(output_kernel_dir / "script_gpu.py", "w", encoding="utf-8") as f:
