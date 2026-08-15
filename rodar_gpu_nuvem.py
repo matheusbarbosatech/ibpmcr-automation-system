@@ -99,8 +99,8 @@ def log(msg):
         pass
 
 try:
-    log("[IBPM CR GPU] Instalando bibliotecas sem alterar PyTorch...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "faster-whisper", "yt-dlp"], check=False)
+    log("[IBPM CR GPU] Instalando bibliotecas e yt-dlp (master) no ambiente Kaggle...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "faster-whisper", "git+https://github.com/yt-dlp/yt-dlp.git"], check=False)
 
     import torch
     log(f"[IBPM CR GPU] PyTorch Versao: {{torch.__version__}} | CUDA Disponivel: {{torch.cuda.is_available()}}")
@@ -154,9 +154,9 @@ try:
         output_template = f"/tmp/audio_{{vid}}.%(ext)s"
         cmd_dl = [
             "yt-dlp",
-            "--extractor-args", "youtube:player_client=android,web",
+            "--extractor-args", "youtube:player_client=mweb,ios",
             "--no-check-certificates",
-            "-f", "ba",
+            "-f", "ba/b",
             "-o", output_template,
             f"https://www.youtube.com/watch?v={{vid}}"
         ]
