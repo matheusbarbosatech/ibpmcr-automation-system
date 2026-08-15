@@ -80,16 +80,16 @@ def preparar_kernel_kaggle(output_kernel_dir: Path):
 
     pendentes_json_str = json.dumps(pendentes_list, ensure_ascii=False)
 
-    # Carregar e comprimir cookies do YouTube (apenas linhas youtube.com)
+    # Carregar e comprimir cookies do YouTube + Google (linhas youtube.com e google.com)
     import base64, zlib
     cookies_b64 = ""
     cookies_file = BASE_DIR / "data" / "youtube_cookies.txt"
     if cookies_file.exists():
         raw = cookies_file.read_text(encoding="utf-8", errors="ignore")
-        linhas = [l for l in raw.split("\n") if "youtube.com" in l.lower() or l.startswith("# Netscape") or l.startswith("# HTTP")]
+        linhas = [l for l in raw.split("\n") if any(d in l.lower() for d in ["youtube.com", "google.com", "googleusercontent.com"]) or l.startswith("# Netscape") or l.startswith("# HTTP")]
         filtered = "\n".join(linhas)
         cookies_b64 = base64.b64encode(zlib.compress(filtered.encode("utf-8"), level=9)).decode("ascii")
-        logger.info(f"Cookies YouTube: {len(linhas)} linhas, {len(cookies_b64)} chars base64")
+        logger.info(f"Cookies YouTube+Google: {len(linhas)} linhas, {len(cookies_b64)} chars base64")
     else:
         logger.warning("Arquivo youtube_cookies.txt nao encontrado - videos bot-bloqueados podem falhar")
 
@@ -189,6 +189,7 @@ try:
         output_template = f"/tmp/audio_{{vid}}.%(ext)s"
         cmd_dl = [
             "yt-dlp",
+            "--extractor-args", "youtube:player_client=android,web,mweb",
             "--remote-components", "ejs:github",
             "--js-runtimes", "deno:/root/.deno/bin/deno",
             "--cookies", "/kaggle/working/youtube_cookies.txt",
