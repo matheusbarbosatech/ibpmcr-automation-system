@@ -1,13 +1,14 @@
 """
-Minerador NLP Extrativo, Heurístico e Agrupamento Temático (Fase 3 Pro) - IBPM CR.
+Minerador NLP Extrativo, Heuristico e Agrupamento Tematico (Fase 3 Pro v2) - IBPM CR.
 
-Implementação baseada no artigo técnico de Mineração Extrativa Semântica:
-1. TextRank / LexRank em Grafos de Sentenças (PageRank via Cosseno TF-IDF).
-2. Algoritmo Dual de Janela Deslizante (Curtos: 30s-90s | Médios: 3m-15m).
-3. Supressão de Não-Máximos Temporal (tIoU NMS) para eliminação de sobreposição de cortes.
-4. Sistema de Scoring Calibrado (0.40 * TextRank + 0.60 * Gatilhos).
-5. Filtro de Exclusão Negativa (Blacklist Administrativa).
-6. PlaylistOrganizer (Clustering Temático Cross-Sermão via MiniBatchKMeans / TF-IDF).
+Melhorias v2 sobre v1:
+1. parse_text_with_real_timestamps(): le [HH:MM:SS] reais do Whisper.
+2. _score_positional_weight(): fator de peso por posicao temporal.
+3. _score_emotional_intensity(): intensidade emocional por exclamacoes, repeticao e gatilhos.
+4. _extract_title_from_content(): extrai titulo descritivo real por TF-IDF local.
+5. short_hooks / medium_markers / blacklist expandidos (50+ padroes pentecostais brasileiros).
+6. Threshold minimo de score: filtra cortes irrelevantes.
+7. TextRank com max_features=500 e 15 iteracoes.
 """
 
 import sys
@@ -15,9 +16,11 @@ import os
 import re
 import json
 import csv
+import math
 import numpy as np
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
+from collections import Counter
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -28,139 +31,252 @@ sys.path.append(str(BASE_DIR))
 
 from src.core.logger import get_logger
 
-logger = get_logger("NLPHeuristicMinerPro")
+logger = get_logger("NLPHeuristicMinerProV2")
 
 
 class DualSermonMiner:
     """
-    Minerador de Alta Precisão baseado em TextRank, Heurísticas Homiléticas e NMS Temporal.
+    Minerador de Alta Precisao v2: TextRank + Timestamps Reais + Posicao + Emocao + NMS + Heuristica.
     """
 
-    def __init__(self, blacklists: Optional[List[str]] = None):
+    def __init__(self, blacklists=None):
         self.blacklists = blacklists or [
-            r'd[íi]zimo', r'oferta', r'estacionamento', r'boa noite',
-            r'inscreva-se', r'boletim', r'sonoplastia', r'microfone',
-            r'banco', r'pix', r'tesouraria', r'comunicados', r'saída', r'cantina'
+            r'd[ii]zimo', r'oferta', r'estacionamento', r'boa noite', r'boa tarde', r'bom dia',
+            r'inscreva-se', r'boletim', r'sonoplastia', r'microfone', r'banco', r'pix',
+            r'tesouraria', r'comunicados', r'sa[ii]da', r'cantina', r'aniversariante',
+            r'vamos sentar', r'vamos ficar de p[ee]', r'vamos abrir a b[ii]blia',
+            r'proxima semana', r'na semana que vem', r'encerrar o culto',
+            r'aplicativo', r'youtube', r'like', r'compartilhe', r'notificacao',
+            r'vai fazer a oferta', r'passar o envelope', r'celular no silencioso',
+            r'informes', r'avisos', r'fique a vontade', r'pode sentar',
         ]
 
         self.short_hooks = [
-            r'preste aten[çc][ãa]o', r'olhe para mim', r'a b[íi]blia diz',
-            r'o segredo [eé]', r'voc[êe] precisa', r'pare de', r'deus fala',
-            r'não desista', r'deus mandou te dizer', r'olha para o irmão',
-            r'tem milagre aqui', r'receba essa palavra', r'aleluia', r'glória a deus'
+            r'preste aten[cc][aa]o', r'olhe para mim', r'me olha', r'escuta isso',
+            r'para um momento', r'isso [ee] importante', r'anota isso',
+            r'a b[ii]blia diz', r'a palavra de deus diz', r'diz assim', r'est[aa] escrito',
+            r'em \w+ cap[ii]tulo', r'jesus disse', r'o senhor disse', r'deus falou',
+            r'o segredo [ee]', r'voc[ee] precisa', r'deus mandou te dizer',
+            r'palavra para', r'receba essa palavra', r'tem milagre aqui', r'profecia',
+            r'n[aa]o [ee] coincid[ee]ncia', r'deus n[aa]o falha',
+            r'pare de', r'n[aa]o desista', r'levanta a cabe[cc]a',
+            r'voc[ee] vai vencer', r'isso vai mudar', r'sua vida vai',
+            r'aleluia', r'gl[oo]ria a deus', r'amen', r'hallelujah',
+            r'chora n[aa]o', r'chegou a hora', r'[ee] hora de',
+            r'voc[ee] [ee] filho', r'filho de deus', r'herdeiro',
+            r'autoridade em cristo', r'no nome de jesus',
+            r'vem para jesus', r'hoje [ee] o dia', r'se arrepende',
         ]
 
         self.medium_markers = [
-            r'aconteceu', r'certa feita', r'hist[óo]ria', r'o que isso significa',
-            r'em primeiro lugar', r'veja o que deus', r'a lição que tiramos',
-            r'em segundo lugar', r'imagine a cena', r'vamos ler em'
+            r'aconteceu', r'certa feita', r'hist[oo]ria', r'conta a b[ii]blia',
+            r'imagine a cena', r'pensa comigo', r'veja o cen[aa]rio',
+            r'era uma vez', r'naquele tempo', r'nos dias de',
+            r'em primeiro lugar', r'em segundo lugar', r'em terceiro lugar',
+            r'primeiro ponto', r'segundo ponto', r'ponto principal',
+            r'a li[cc][aa]o que tiramos', r'o que isso significa',
+            r'veja o que deus', r'o princ[ii]pio [ee]',
+            r'vamos ler em', r'abre a b[ii]blia', r'texto base',
+            r'o texto diz', r'a palavra (grega|hebraica) significa',
+            r'contexto hist[oo]rico', r'o profeta', r'o ap[oo]stolo',
+            r'aplica[cc][aa]o', r'na pr[aa]tica', r'como aplicar',
+            r'isso significa que voc[ee]', r'para a sua vida',
+            r'eu quero te desafiar', r'meu desafio para voc[ee]',
+            r'testemunho', r'quando eu era', r'deus fez na minha vida',
         ]
 
-        logger.info("🧠 Inicializado DualSermonMiner (TextRank + NMS + Heurística).")
+        self._emotional_words = [
+            'milagre', 'cura', 'libertacao', 'avivamento', 'fogo', 'uncao',
+            'gloria', 'aleluia', 'amen', 'poderoso', 'sobrenatural',
+            'transformacao', 'bencao', 'vitoria', 'salvacao', 'arrependimento',
+            'profecia', 'revelacao', 'ungido', 'majestade',
+        ]
 
-    def format_timestamp(self, seconds: float) -> str:
-        """Converte segundos para hh:mm:ss."""
+        logger.info("Inicializado DualSermonMiner v2 (Timestamps Reais + Posicao + Emocao + NMS).")
+
+    def format_timestamp(self, seconds):
         hrs = int(seconds // 3600)
         mins = int((seconds % 3600) // 60)
         secs = int(seconds % 60)
         return f"{hrs:02d}:{mins:02d}:{secs:02d}"
 
-    def parse_text_into_sentences(self, transcript_text: str) -> List[Dict[str, Any]]:
-        """
-        Segmenta o texto em orações/sentenças respeitando pontuação terminal (. ! ?)
-        ou fragmentos de 15 palavras se não houver pontuação.
-        """
-        raw_sentences = re.split(r'(?<=[.!?])\s+', transcript_text.strip())
+    def parse_text_with_real_timestamps(self, transcript_text):
+        """Le timestamps [HH:MM:SS] reais do Whisper. Fallback para estimativa."""
+        pattern = re.compile(r'\[(\d{2}):(\d{2}):(\d{2})\]\s*(.*?)(?=\[\d{2}:\d{2}:\d{2}\]|$)', re.DOTALL)
+        matches = list(pattern.finditer(transcript_text))
 
-        # Fallback: Se não houver pontuação, quebra em blocos de 15 palavras
+        if len(matches) >= 5:
+            sentences = []
+            for i, m in enumerate(matches):
+                h, mi, s = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                start_sec = h * 3600 + mi * 60 + s
+                text = m.group(4).strip().replace('\n', ' ')
+                if not text:
+                    continue
+                if i + 1 < len(matches):
+                    h2, mi2, s2 = int(matches[i+1].group(1)), int(matches[i+1].group(2)), int(matches[i+1].group(3))
+                    end_sec = h2 * 3600 + mi2 * 60 + s2
+                else:
+                    end_sec = start_sec + max(2.0, len(text.split()) / 2.2)
+                end_sec = max(end_sec, start_sec + 0.5)
+                sentences.append({
+                    "text": text,
+                    "start": round(start_sec, 2),
+                    "end": round(end_sec, 2),
+                    "duration": round(end_sec - start_sec, 2),
+                    "has_real_ts": True,
+                })
+            logger.info(f"Timestamps reais: {len(sentences)} linhas do Whisper.")
+            return sentences
+
+        logger.warning("Sem timestamps [HH:MM:SS] suficientes - usando estimativa.")
+        return self._parse_text_estimated(transcript_text)
+
+    def _parse_text_estimated(self, transcript_text):
+        raw_sentences = re.split(r'(?<=[.!?])\s+', transcript_text.strip())
         if len(raw_sentences) <= 3 and len(transcript_text.split()) > 100:
             words = transcript_text.strip().split()
-            raw_sentences = [" ".join(words[i:i + 15]) + "." for i in range(0, len(words), 15)]
-
+            raw_sentences = [" ".join(words[i:i+15]) + "." for i in range(0, len(words), 15)]
         sentences = []
         current_sec = 0.0
-
         for s in raw_sentences:
-            s_clean = s.strip()
+            s_clean = re.sub(r'\[\d{2}:\d{2}:\d{2}\]', '', s.strip()).strip()
             if not s_clean:
                 continue
-            words_count = len(s_clean.split())
-            duration = max(1.5, round(words_count / 2.2, 2))  # ~2.2 palavras por segundo
-            end_sec = round(current_sec + duration, 2)
-
-            sentences.append({
-                "text": s_clean,
-                "start": current_sec,
-                "end": end_sec,
-                "duration": duration
-            })
+            wc = len(s_clean.split())
+            dur = max(1.5, round(wc / 2.2, 2))
+            end_sec = round(current_sec + dur, 2)
+            sentences.append({"text": s_clean, "start": current_sec, "end": end_sec,
+                               "duration": dur, "has_real_ts": False})
             current_sec = end_sec
-
         return sentences
 
-    def _compute_textrank(self, texts: List[str]) -> np.ndarray:
-        """
-        Calcula a centralidade global de sentenças usando PageRank sobre Matriz de Cosseno TF-IDF em milissegundos.
-        """
+    def _compute_textrank(self, texts, damping=0.85):
         if not texts or len(texts) < 2:
             return np.ones(len(texts))
-
         try:
-            # Seleciona sentenças representativas para acelerar a matriz de grafos
-            vec = TfidfVectorizer(max_features=300, min_df=1)
+            vec = TfidfVectorizer(max_features=500, min_df=1, sublinear_tf=True)
             tfidf = vec.fit_transform(texts)
             sim_matrix = cosine_similarity(tfidf, tfidf)
             np.fill_diagonal(sim_matrix, 0)
-
-            # Matriz Estocástica Rápida
             row_sums = sim_matrix.sum(axis=1)
             row_sums[row_sums == 0] = 1.0
-            stochastic_matrix = sim_matrix / row_sums[:, np.newaxis]
-
-            # 10 iterações de Power Iteration são suficientes para convergência
+            stochastic = sim_matrix / row_sums[:, np.newaxis]
             n = sim_matrix.shape[0]
-            d = 0.85
             p = np.ones(n) / n
-            for _ in range(10):
-                p = (1 - d) / n + d * stochastic_matrix.T.dot(p)
-
-            min_val, max_val = p.min(), p.max()
-            if max_val > min_val:
-                p = (p - min_val) / (max_val - min_val)
-
+            for _ in range(15):
+                p = (1 - damping) / n + damping * stochastic.T.dot(p)
+            mn, mx = p.min(), p.max()
+            if mx > mn:
+                p = (p - mn) / (mx - mn)
             return p
         except Exception:
             return np.ones(len(texts)) / max(1, len(texts))
 
-    def generate_windows(self, sentences: List[Dict[str, Any]], min_dur: float, max_dur: float, step: int = 10) -> List[Dict[str, Any]]:
-        """
-        Gera janelas deslizantes otimizadas em milissegundos evitando alocação desnecessária de strings.
-        """
-        windows, n = [], len(sentences)
-        max_sentences_span = 600 if min_dur >= 180.0 else 80
+    def _score_positional_weight(self, start_sec, total_duration):
+        if total_duration <= 0:
+            return 1.0
+        rel = start_sec / total_duration
+        if rel < 0.20:
+            return 0.60
+        elif rel < 0.50:
+            return 0.85
+        elif rel < 0.80:
+            return 1.00
+        else:
+            return 0.90
 
-        for i in range(0, n, step):
-            win_start = sentences[i]['start']
-            for j in range(i + 1, min(n, i + max_sentences_span)):
-                win_end = sentences[j]['end']
-                dur = win_end - win_start
+    def _score_emotional_intensity(self, win_text):
+        text_lower = win_text.lower()
+        excl_score = min(0.30, win_text.count('!') * 0.05)
+        word_hits = sum(1 for w in self._emotional_words if w in text_lower)
+        word_score = min(0.40, word_hits * 0.04)
+        words = re.findall(r'\b\w{4,}\b', text_lower)
+        if words:
+            top_count = Counter(words).most_common(1)[0][1]
+            rep_score = min(0.30, (top_count - 1) * 0.06) if top_count > 2 else 0.0
+        else:
+            rep_score = 0.0
+        return min(1.0, excl_score + word_score + rep_score)
 
-                if min_dur <= dur <= max_dur:
-                    windows.append({
-                        'start': win_start,
-                        'end': win_end,
-                        'duration': dur,
-                        'indices': list(range(i, j + 1))
-                    })
-                    break  # Pega apenas a primeira janela valida que satisfaz a duracao a partir de i
-                elif dur > max_dur:
-                    break
+    def _extract_title_from_content(self, win_text, max_words=7):
+        clean = re.sub(r'\[\d{2}:\d{2}:\d{2}\]', '', win_text)
+        clean = re.sub(r'[^\w\s]', ' ', clean)
+        stopwords = {
+            'de','do','da','dos','das','em','no','na','nos','nas','um','uma',
+            'que','se','com','por','para','mas','ou','e','a','o','as','os',
+            'eu','ele','ela','voce','nos','eles','me','te','lhe','foi','era',
+            'esta','estou','sao','ser','ter','seu','sua','isso','este','esse',
+            'pelo','pela','mais','nao','sim','aqui','ali','entao','como',
+            'quando','porque','pois','tambem','ja','bem','muito','vai','tudo',
+        }
+        words = [w.lower() for w in clean.split() if len(w) > 3 and w.lower() not in stopwords]
+        if not words:
+            return "Momento Profetico"
+        freq = Counter(words)
+        top_words = {w for w, _ in freq.most_common(max_words)}
+        ordered = []
+        seen = set()
+        for w in words:
+            if w in top_words and w not in seen:
+                ordered.append(w.capitalize())
+                seen.add(w)
+            if len(ordered) >= max_words:
+                break
+        return " ".join(ordered) if ordered else "Mensagem Poderosa"
+
+    def generate_windows(self, sentences, min_dur, max_dur, step=10):
+        """
+        Para SHORTS (min_dur < 180s): gera uma janela por ponto de inicio.
+        Para MEDIOS (min_dur >= 180s): gera snapshots em 5 durações-alvo distintas
+        (3, 5, 8, 12, 15 min) por ponto de inicio, para que o NMS escolha
+        os melhores por score em vez de sempre pegar o minimo.
+        """
+        windows = []
+        n = len(sentences)
+
+        if min_dur >= 180.0:
+            # Modo MEDIO: múltiplos tamanhos-alvo por ponto de inicio
+            target_durations = [d for d in [180, 300, 480, 720, 900] if min_dur <= d <= max_dur]
+            for i in range(0, n, step):
+                win_start = sentences[i]['start']
+                for target in target_durations:
+                    best_j = None
+                    best_diff = float('inf')
+                    for j in range(i + 1, min(n, i + 800)):
+                        win_end = sentences[j]['end']
+                        dur = win_end - win_start
+                        if dur > max_dur:
+                            break
+                        if min_dur <= dur <= max_dur:
+                            diff = abs(dur - target)
+                            if diff < best_diff:
+                                best_diff = diff
+                                best_j = j
+                    if best_j is not None:
+                        win_end = sentences[best_j]['end']
+                        dur = win_end - win_start
+                        windows.append({
+                            'start': win_start, 'end': win_end,
+                            'duration': dur, 'indices': list(range(i, best_j + 1))
+                        })
+        else:
+            # Modo SHORT: uma janela por ponto de inicio (comportamento original)
+            max_span = 80
+            for i in range(0, n, step):
+                win_start = sentences[i]['start']
+                for j in range(i + 1, min(n, i + max_span)):
+                    win_end = sentences[j]['end']
+                    dur = win_end - win_start
+                    if min_dur <= dur <= max_dur:
+                        windows.append({'start': win_start, 'end': win_end,
+                                        'duration': dur, 'indices': list(range(i, j + 1))})
+                        break
+                    elif dur > max_dur:
+                        break
         return windows
 
-    def suppress_nms(self, windows: List[Dict[str, Any]], iou_thresh: float) -> List[Dict[str, Any]]:
-        """
-        Supressão de Não-Máximos (NMS Temporal) para eliminar cortes sobrepostos.
-        """
+    def suppress_nms(self, windows, iou_thresh):
         if not windows:
             return []
         sorted_wins = sorted(windows, key=lambda x: x['score'], reverse=True)
@@ -178,27 +294,26 @@ class DualSermonMiner:
             sorted_wins = remaining
         return selected
 
-    def extract_7_words_anchor(self, text: str, is_end: bool = False) -> str:
-        """Extrai âncora literal de exatamente 7 palavras."""
-        words = text.split()
+    def extract_7_words_anchor(self, text, is_end=False):
+        clean = re.sub(r'\[\d{2}:\d{2}:\d{2}\]', '', text).strip()
+        words = clean.split()
         if len(words) < 7:
-            while len(words) < 7:
-                words.append("palavra")
-            return " ".join(words)
-        
-        if is_end:
-            return " ".join(words[-7:])
-        return " ".join(words[:7])
+            words += ["palavra"] * (7 - len(words))
+        return " ".join(words[-7:] if is_end else words[:7])
 
-    def mine_sermon(self, transcript_text: str, sermon_id: str = "IBPM_CULTO") -> Dict[str, Any]:
-        """
-        Extrai tanto os cortes curtos (30s-90s) quanto médios (3m-15m) usando TextRank + NMS + Heurística.
-        """
-        sentences = self.parse_text_into_sentences(transcript_text)
+    def mine_sermon(self, transcript_text, sermon_id="IBPM_CULTO"):
+        """v2: timestamps reais + posicao + emocao + titulo automatico + threshold minimo."""
+        sentences = self.parse_text_with_real_timestamps(transcript_text)
+        if not sentences:
+            return {"job_id": f"job_v2_{sermon_id}", "source_video_id": sermon_id,
+                    "sermon_title": f"Culto {sermon_id}", "preacher_name": "Pastor IBPM CR",
+                    "short_form_cuts": [], "mid_form_cuts": []}
+
         texts = [s['text'] for s in sentences]
         tr_scores = self._compute_textrank(texts)
+        total_duration = sentences[-1]['end'] if sentences else 1.0
 
-        # 1. Vídeos Curtos (30s a 90s) - Amostragem fina (step=3)
+        # --- SHORTS (30s-90s) ---
         short_wins = self.generate_windows(sentences, 30.0, 90.0, step=3)
         valid_shorts = []
         for w in short_wins:
@@ -207,17 +322,22 @@ class DualSermonMiner:
                 continue
             tr_val = float(np.mean([tr_scores[idx] for idx in w['indices']]))
             hooks = sum(1.0 for h in self.short_hooks if re.search(h, win_text.lower()))
-            score = (0.40 * tr_val) + (0.60 * hooks)
+            hooks_norm = min(1.0, hooks / 3.0)
+            emot = self._score_emotional_intensity(win_text)
+            pos = self._score_positional_weight(w['start'], total_duration)
+            raw_score = (0.25 * tr_val) + (0.40 * hooks_norm) + (0.20 * emot) + (0.15 * tr_val)
+            score = round(raw_score * pos, 3)
+            if score < 0.10:
+                continue
             w['score'] = score
             w['text'] = win_text
             w['sermon_id'] = sermon_id
             valid_shorts.append(w)
 
-        # Filtra Top 50 candidatos antes do NMS para performance instantânea (1ms)
-        valid_shorts = sorted(valid_shorts, key=lambda x: x['score'], reverse=True)[:50]
-        shorts = self.suppress_nms(valid_shorts, 0.25)[:3]
+        valid_shorts = sorted(valid_shorts, key=lambda x: x['score'], reverse=True)[:60]
+        shorts = self.suppress_nms(valid_shorts, 0.25)[:5]
 
-        # 2. Vídeos Médios (180s a 900s / 3 a 15 min) - Amostragem larga (step=15)
+        # --- MEDIOS (180s-900s) ---
         medium_wins = self.generate_windows(sentences, 180.0, 900.0, step=15)
         valid_mediums = []
         for w in medium_wins:
@@ -226,119 +346,111 @@ class DualSermonMiner:
                 continue
             tr_val = float(np.mean([tr_scores[idx] for idx in w['indices']]))
             markers = sum(1.0 for m in self.medium_markers if re.search(m, win_text.lower()))
-            score = (0.70 * tr_val) + (0.30 * markers)
+            markers_norm = min(1.0, markers / 4.0)
+            emot = self._score_emotional_intensity(win_text)
+            pos = self._score_positional_weight(w['start'], total_duration)
+            raw_score = (0.45 * tr_val) + (0.30 * markers_norm) + (0.15 * emot) + (0.10 * tr_val)
+            score = round(raw_score * pos, 3)
+            if score < 0.08:
+                continue
             w['score'] = score
             w['text'] = win_text
             w['sermon_id'] = sermon_id
             valid_mediums.append(w)
 
-        # Filtra Top 50 candidatos antes do NMS para performance instantânea (1ms)
-        valid_mediums = sorted(valid_mediums, key=lambda x: x['score'], reverse=True)[:50]
-        mediums = self.suppress_nms(valid_mediums, 0.35)[:2]
+        valid_mediums = sorted(valid_mediums, key=lambda x: x['score'], reverse=True)[:60]
+        mediums = self.suppress_nms(valid_mediums, 0.35)[:3]
 
-        # Formatação Pydantic / Schema da Fase 3
+        # --- Formatacao ---
         short_payload = []
         for idx, s in enumerate(shorts, 1):
+            title = self._extract_title_from_content(s['text'])
             short_payload.append({
                 "cut_id": f"short_{idx:03d}",
-                "title_hook_a": f"Impacto Teológico #{idx}",
-                "title_hook_b": f"Revelação de Fé #{idx}",
+                "title_hook_a": title,
+                "title_hook_b": f"{title} | IBPM CR",
                 "start_anchor_7_words": self.extract_7_words_anchor(s['text'], is_end=False),
                 "end_anchor_7_words": self.extract_7_words_anchor(s['text'], is_end=True),
-                "category": "Gatilho Profético",
+                "category": "Gatilho Profetico",
                 "emotional_tone": "Inspirador",
-                "start_sec": s['start'],
-                "end_sec": s['end'],
-                "score": round(s['score'], 2),
-                "text_snippet": s['text'][:150] + "..."
+                "start_sec": round(s['start'], 2),
+                "end_sec": round(s['end'], 2),
+                "score": round(s['score'], 3),
+                "text_snippet": s['text'][:200] + "..."
             })
 
         medium_payload = []
         for idx, m in enumerate(mediums, 1):
+            title = self._extract_title_from_content(m['text'])
             medium_payload.append({
                 "cut_id": f"mid_{idx:03d}",
-                "title_hook_a": f"Mensagem Exegética #{idx}",
-                "title_hook_b": "Exposição Bíblica Profunda",
+                "title_hook_a": title,
+                "title_hook_b": f"{title} - Pregacao Completa",
                 "start_anchor_7_words": self.extract_7_words_anchor(m['text'], is_end=False),
                 "end_anchor_7_words": self.extract_7_words_anchor(m['text'], is_end=True),
                 "category": "Exegese",
                 "emotional_tone": "Reflexivo",
-                "start_sec": m['start'],
-                "end_sec": m['end'],
-                "score": round(m['score'], 2),
-                "text_snippet": m['text'][:200] + "..."
+                "start_sec": round(m['start'], 2),
+                "end_sec": round(m['end'], 2),
+                "score": round(m['score'], 3),
+                "text_snippet": m['text'][:300] + "..."
             })
 
         insights_payload = {
-            "job_id": f"job_textrank_{sermon_id}",
+            "job_id": f"job_v2_{sermon_id}",
             "source_video_id": sermon_id,
             "sermon_title": f"Culto IBPM CR {sermon_id}",
             "preacher_name": "Pastor IBPM CR",
             "short_form_cuts": short_payload,
-            "mid_form_cuts": medium_payload
+            "mid_form_cuts": medium_payload,
+            "metadata": {
+                "total_duration_sec": round(total_duration, 1),
+                "sentences_parsed": len(sentences),
+                "uses_real_timestamps": sentences[0].get("has_real_ts", False) if sentences else False,
+                "algorithm_version": "v2"
+            }
         }
 
-        # Salva a linha no relatorio_cortes.csv
         self.export_relatorio_csv(sermon_id, short_payload + medium_payload)
-
         return insights_payload
 
-    def export_relatorio_csv(self, source_file: str, cuts: List[Dict[str, Any]]) -> str:
-        """Exporta relatorio_cortes.csv."""
+    def export_relatorio_csv(self, source_file, cuts):
         csv_path = Path("data/relatorio_cortes.csv")
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         file_exists = csv_path.exists()
-
         with open(csv_path, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             if not file_exists:
-                writer.writerow([
-                    "arquivo_origem", "corte_id", "timestamp_inicio",
-                    "timestamp_fim", "duracao_segundos", "score", "texto_do_corte"
-                ])
-
+                writer.writerow(["arquivo_origem", "corte_id", "timestamp_inicio",
+                                  "timestamp_fim", "duracao_segundos", "score", "titulo_extraido"])
             for c in cuts:
                 s_sec = c.get("start_sec", 0.0)
                 e_sec = c.get("end_sec", 45.0)
-                dur = round(e_sec - s_sec, 1)
-                writer.writerow([
-                    source_file,
-                    c.get("cut_id"),
-                    self.format_timestamp(s_sec),
-                    self.format_timestamp(e_sec),
-                    dur,
-                    c.get("score", 50.0),
-                    c.get("title_hook_a", "Corte Minerado")
-                ])
-
+                writer.writerow([source_file, c.get("cut_id"),
+                                  self.format_timestamp(s_sec), self.format_timestamp(e_sec),
+                                  round(e_sec - s_sec, 1), c.get("score", 0.0),
+                                  c.get("title_hook_a", "-")])
         return str(csv_path)
 
 
 class PlaylistOrganizer:
-    """
-    Módulo Cross-Sermão para agrupamento de vídeos médios em playlists temáticas via MiniBatchKMeans.
-    """
+    """Agrupamento Cross-Sermao em playlists tematicas via MiniBatchKMeans."""
 
-    def __init__(self, num_playlists: int = 5):
+    def __init__(self, num_playlists=8):
         self.num_playlists = num_playlists
-        self.vectorizer = TfidfVectorizer(max_features=500)
+        self.vectorizer = TfidfVectorizer(max_features=800, sublinear_tf=True)
 
-    def build_playlists(self, all_medium_videos: List[Dict[str, Any]]) -> Dict[int, List[Dict[str, Any]]]:
-        """Agrupa os blocos médios extraídos em playlists temáticas."""
+    def build_playlists(self, all_medium_videos):
         if not all_medium_videos or len(all_medium_videos) < self.num_playlists:
             return {0: all_medium_videos}
-
         texts = [v.get('text_snippet', '') for v in all_medium_videos]
         tfidf_matrix = self.vectorizer.fit_transform(texts)
-        kmeans = MiniBatchKMeans(n_clusters=self.num_playlists, random_state=42, batch_size=50)
+        n_clusters = min(self.num_playlists, len(all_medium_videos))
+        kmeans = MiniBatchKMeans(n_clusters=n_clusters, random_state=42, batch_size=50)
         labels = kmeans.fit_predict(tfidf_matrix)
-
-        playlists = {i: [] for i in range(self.num_playlists)}
+        playlists = {i: [] for i in range(n_clusters)}
         for idx, label in enumerate(labels):
             playlists[int(label)].append(all_medium_videos[idx])
-
-        # Ordena vídeos de cada playlist por pontuação
         for p_id in playlists:
             playlists[p_id] = sorted(playlists[p_id], key=lambda x: x.get('score', 0), reverse=True)
-
         return playlists

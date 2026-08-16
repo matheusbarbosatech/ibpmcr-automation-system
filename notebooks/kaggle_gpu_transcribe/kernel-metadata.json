@@ -1,0 +1,13 @@
+{
+  "id": "omatheusbsilva/ibpmcr-whisper-gpu",
+  "title": "ibpmcr-whisper-gpu",
+  "code_file": "notebook_gpu.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": []
+}

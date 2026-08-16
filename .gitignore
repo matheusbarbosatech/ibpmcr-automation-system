@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 cookies.txt
+kaggle.json
 data/
 logs/
 *.log
@@ -46,3 +47,6 @@ credentials/*.pickle
 # IDE
 .vscode/
 .idea/
+
+notebooks/kaggle_cookies_dataset/youtube_cookies.txt
+data/youtube_cookies.txt
