@@ -1,8 +1,7 @@
 """
-Serviço de Mineração Teológica Desacoplada (Fase 2 + Fase 3) - IBPM CR Automation System.
+Serviço de Mineração Teológica Desacoplada (Fase 2 Mineração) - IBPM CR Automation System.
 
-Orquestra a Transcrição Leve (Fase 2 via Groq Whisper API / FFmpeg Compression)
-e a Mineração Cognitiva de Texto (Fase 3 via Gemini 1.5 Flash Text API).
+Orquestra a Transcrição Leve e a Mineração Cognitiva de Texto (Fase 2 Mineração via Gemini / Groq Llama).
 Garante zero falhas de upload de áudio, 100% de estabilidade e máxima velocidade.
 """
 
@@ -21,7 +20,7 @@ logger = get_logger("DecoupledTheologyMinerService")
 
 class DecoupledTheologyMinerService:
     """
-    Serviço orquestrador das Fases 2 e 3 desacopladas.
+    Serviço orquestrador da Fase 2 Mineração.
     """
 
     def __init__(
@@ -41,8 +40,8 @@ class DecoupledTheologyMinerService:
     ) -> Dict[str, Any]:
         """
         Executa a pipeline desacoplada:
-        1. Transcreve o MP3 compactado via Groq Whisper Large V3 (Fase 2) em segundos.
-        2. Lê o arquivo .txt gerado e dispara a mineração teológica no Gemini 1.5 Flash via Texto (Fase 3).
+        1. Transcreve o MP3 compactado via Groq Whisper Large V3 em segundos.
+        2. Lê o arquivo .txt gerado e dispara a mineração teológica no Gemini 1.5 Flash via Texto (Fase 2 Mineração).
         """
         if not audio_file_path.exists():
             raise FileNotFoundError(f"Áudio local não encontrado: {audio_file_path}")
@@ -63,7 +62,7 @@ class DecoupledTheologyMinerService:
         srt_path = trans_dir2 / f"{audio_file_path.stem}.srt"
         transcript_text = ""
 
-        # STEP 1 (FASE 2): Verifica se a transcrição local (.txt ou .srt) existe nas pastas do acervo
+        # STEP 1: Verifica se a transcrição local (.txt ou .srt) existe nas pastas do acervo
         if txt_path1.exists() and txt_path1.stat().st_size > 50:
             logger.info("📄 Transcrição .txt encontrada em data/audio_podcasts/transcricoes. Usando texto off-line.", file=txt_path1.name)
             with open(txt_path1, "r", encoding="utf-8", errors="ignore") as f:
@@ -88,7 +87,7 @@ class DecoupledTheologyMinerService:
         if not transcript_text or len(transcript_text.strip()) < 50:
             raise ValueError("Texto da transcrição retornado é inválido ou insuficiente.")
 
-        # STEP 2 (FASE 3): Mineração Teológica Cognitiva (Gemini ➔ Fallback Groq Llama 3.3)
+        # STEP 2 (FASE 2 MINERAÇÃO): Mineração Teológica Cognitiva (Gemini ➔ Fallback Groq Llama 3.3)
         logger.info("🧠 Disparando Mineração Teológica no Gemini 1.5 Flash via Texto", job_id=job_id)
         
         mining_payload_dict = None
@@ -110,8 +109,8 @@ class DecoupledTheologyMinerService:
                 job_id=f"{job_id}_groq_llama"
             )
 
-        # STEP 3: Persiste o JSON dos insights minerados na pasta da Fase 3
-        insights_dir = Path("data/audio_podcasts/conteudos_fase3")
+        # STEP 3: Persiste o JSON dos insights minerados na pasta da Fase 2 Mineração
+        insights_dir = Path("data/audio_podcasts/conteudos_fase2")
         insights_dir.mkdir(parents=True, exist_ok=True)
         out_file = insights_dir / f"{audio_file_path.stem}.insights.json"
 
@@ -124,7 +123,7 @@ class DecoupledTheologyMinerService:
         mid_cuts = mining_payload_dict.get("mid_form_cuts", [])
 
         # Atualiza SQLite Master Plan State
-        self.state_mgr.save_insights_fase3(
+        self.state_mgr.save_insights_fase2(
             video_id=source_video_id,
             idx=1,
             title=audio_file_path.stem,

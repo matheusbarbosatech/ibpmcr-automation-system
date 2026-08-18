@@ -64,7 +64,7 @@ def task_mine_sermon_content(self, transcript_json_path: str, title: str = "") -
     state_mgr = MasterPlanManager()
     v_id = sermon_title.split("_")[2] if len(sermon_title.split("_")) > 2 else sermon_title
 
-    out_insights_dir = path_obj.parent.parent / "conteudos_fase3"
+    out_insights_dir = path_obj.parent.parent / "conteudos_fase2"
     out_insights_dir.mkdir(parents=True, exist_ok=True)
     out_json_file = out_insights_dir / f"{sermon_title}.insights.json"
 
@@ -72,7 +72,7 @@ def task_mine_sermon_content(self, transcript_json_path: str, title: str = "") -
     with open(out_json_file, "w", encoding="utf-8") as f:
         f.write(raw_json_str)
 
-    state_mgr.save_insights_fase3(
+    state_mgr.save_insights_fase2(
         video_id=v_id,
         idx=1,
         title=sermon_title,

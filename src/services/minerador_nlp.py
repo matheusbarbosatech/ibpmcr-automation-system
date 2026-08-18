@@ -1,5 +1,5 @@
 """
-Minerador NLP Extrativo, Heuristico e Agrupamento Tematico (Fase 3 Pro v2) - IBPM CR.
+Minerador NLP Extrativo, Heuristico e Agrupamento Tematico (Fase 2 Mineração Pro v2) - IBPM CR.
 
 Melhorias v2 sobre v1:
 1. parse_text_with_real_timestamps(): le [HH:MM:SS] reais do Whisper.

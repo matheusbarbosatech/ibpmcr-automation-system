@@ -77,7 +77,7 @@ class GroqWhisperClient:
         job_id: str = "job_groq_llama_mining"
     ) -> Dict[str, Any]:
         """
-        Executa a mineração teológica (Fase 3) via Groq API usando Llama 3.3 70B com 14.400 req/dia.
+        Executa a mineração teológica (Fase 2 Mineração) via Groq API usando Llama 3.3 70B com 14.400 req/dia.
         Retorna o dicionário serializável do SermonMiningResponse.
         """
         if not self.client:

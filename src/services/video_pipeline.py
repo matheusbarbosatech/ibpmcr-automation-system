@@ -1,5 +1,5 @@
 """
-Serviço Orquestrador da Fase 4 (Video Pipeline) - IBPM CR Automation System.
+Serviço Orquestrador da Fase 3 Renderização (Video Pipeline) - IBPM CR Automation System.
 
 Integra o download cirúrgico (yt-dlp), o gerador de legendas Karaokê (.ASS),
 a renderização visual via FFmpeg (Shorts 9:16 e Mid-Form 16:9) e a publicação
@@ -100,7 +100,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 
 class VideoPipelineService:
-    """Orquestrador de Caso de Uso para a Fase 4 (Renderização 9:16 e 16:9)."""
+    """Orquestrador de Caso de Uso para a Fase 3 Renderização (Renderização 9:16 e 16:9)."""
 
     def __init__(
         self,
@@ -146,7 +146,7 @@ class VideoPipelineService:
         ])
         generate_ass_subtitle_file(words_sample, ass_path)
 
-        output_dir = Path("data/audio_podcasts/cortes_fase4")
+        output_dir = Path("data/audio_podcasts/cortes_fase3")
         output_dir.mkdir(parents=True, exist_ok=True)
         final_video_path = output_dir / f"{cut_id}_9x16.mp4"
 
@@ -192,7 +192,7 @@ class VideoPipelineService:
             job_id=job_id
         )
 
-        output_dir = Path("data/audio_podcasts/cortes_fase4")
+        output_dir = Path("data/audio_podcasts/cortes_fase3")
         output_dir.mkdir(parents=True, exist_ok=True)
         final_video_path = output_dir / f"{cut_id}_16x9.mp4"
 

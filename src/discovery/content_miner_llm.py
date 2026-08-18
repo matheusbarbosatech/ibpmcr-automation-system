@@ -1,9 +1,9 @@
 """
-Módulo da Fase 3 - Hub Inteligente de Mineração de Conteúdo (Gemini LLM API).
+Módulo da Fase 2 Mineração - Hub Inteligente de Mineração de Conteúdo (Gemini LLM API).
 
 Transforma a transcrição integral em um 'Timeline Execution Payload' altamente estruturado
 com Structured Outputs (Pydantic) via novo SDK 'google-genai', aplicando direção de arte,
-copywriting, SEO e âncoras exatas de 7 palavras para corte automatizado em FFmpeg/MoviePy (Fase 4).
+copywriting, SEO e âncoras exatas de 7 palavras para corte automatizado em FFmpeg/MoviePy.
 """
 
 import os
@@ -99,7 +99,7 @@ class TimelineExecutionPayload(BaseModel):
 
 PROMPT_SYSTEM = """Você é um Arquiteto de Conteúdo, Diretor de Arte e Especialista em Engenharia de Dados para Vídeo (Machine Learning & Edição Autônoma para FFmpeg/MoviePy).
 
-Sua missão é analisar o texto integral da pregação do culto da Igreja Batista Pentecostal Mundial (IBPM CR) e gerar um 'Timeline Execution Payload' altamente estruturado. Este JSON funcionará como código executável para um motor de renderização de vídeo automatizado na Fase 4.
+Sua missão é analisar o texto integral da pregação do culto da Igreja Batista Pentecostal Mundial (IBPM CR) e gerar um 'Timeline Execution Payload' altamente estruturado. Este JSON funcionará como código executável para um motor de renderização de vídeo automatizado na Fase 3 Renderização.
 
 REGRA DE OURO (SINCRONIA TEMPORAL LITERAL SEM ALUCINAÇÃO):
 Você está ESTRITAMENTE PROIBIDO de tentar adivinhar segundos ou minutos (start_sec / end_sec).

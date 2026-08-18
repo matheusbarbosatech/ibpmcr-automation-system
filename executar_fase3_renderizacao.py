@@ -1,5 +1,5 @@
 """
-Script Oficial da Fase 4 - Renderização Audiovisual & Geração de Copy para Redes Sociais - IBPM CR Automation System.
+Script Oficial da Fase 3 Renderização - Renderização Audiovisual & Geração de Copy para Redes Sociais - IBPM CR Automation System.
 
 Executa:
 1. Corte e Edição Audiovisual (Stream Copy ultrarrápido -c copy ou Re-encoding Studio 9:16 Vertical com legendas Karaokê .ASS e EBU R128).
@@ -23,7 +23,7 @@ from src.core.logger import get_logger
 from src.services.cortador_ffmpeg import FastStreamCopyCutter, parse_timestamp_to_seconds
 from src.infrastructure.ffmpeg_client import FFmpegClient
 
-logger = get_logger("ExecutarFase4Renderizacao")
+logger = get_logger("ExecutarFase3Renderizacao")
 
 
 def gerar_copys_postagem(cortes_info: List[Dict[str, Any]], output_json: Path, output_txt: Path) -> List[Dict[str, Any]]:
@@ -107,21 +107,24 @@ def gerar_copys_postagem(cortes_info: List[Dict[str, Any]], output_json: Path, o
     return postagens
 
 
-def executar_fase4(modo: str = "stream_copy", max_cortes: int = 50):
+def executar_fase3_renderizacao(modo: str = "stream_copy", max_cortes: int = 50):
     """
-    Executa a Fase 4 completa.
+    Executa a Fase 3 Renderização completa.
     """
-    logger.info(f"🚀 Iniciando FASE 4: Renderização Audiovisual (Modo: {modo.upper()})")
+    logger.info(f"🚀 Iniciando FASE 3 RENDERIZAÇÃO: Renderização Audiovisual (Modo: {modo.upper()})")
 
-    csv_file = Path("data/relatorio_cortes.csv")
+    csv_file = Path("data/audio_podcasts/conteudos_fase2/relatorio_cortes.csv")
+    if not csv_file.exists():
+        csv_file = Path("data/relatorio_cortes.csv")
+
     videos_dir = Path("data/audio_podcasts")
-    output_stream_copy = Path("data/cortes_finais")
-    output_studio_video = Path("data/cortes_finais_video")
-    json_postagens = Path("data/postagens_redes_sociais.json")
-    txt_postagens = Path("data/postagens_redes_sociais.txt")
+    output_stream_copy = Path("data/audio_podcasts/conteudos_fase2/cortes_finais")
+    output_studio_video = Path("data/audio_podcasts/conteudos_fase2/cortes_finais_video")
+    json_postagens = Path("data/audio_podcasts/conteudos_fase2/postagens_redes_sociais.json")
+    txt_postagens = Path("data/audio_podcasts/conteudos_fase2/postagens_redes_sociais.txt")
 
     if not csv_file.exists():
-        logger.error(f"❌ Arquivo '{csv_file}' não encontrado. Execute a Fase 3 primeiro (python executar_mineracao_fase3.py).")
+        logger.error(f"❌ Arquivo '{csv_file}' não encontrado. Execute a Fase 2 Mineração primeiro (python executar_fase2_mineracao.py).")
         return
 
     cortes_info = []
@@ -132,7 +135,7 @@ def executar_fase4(modo: str = "stream_copy", max_cortes: int = 50):
                 break
             cortes_info.append(row)
 
-    logger.info(f"📊 {len(cortes_info)} cortes carregados do relatório da Fase 3.")
+    logger.info(f"📊 {len(cortes_info)} cortes carregados do relatório da Fase 2 Mineração.")
 
     # 1. Executa corte ultrarrápido Stream Copy (-c copy)
     if modo in ["stream_copy", "full"]:
@@ -147,24 +150,24 @@ def executar_fase4(modo: str = "stream_copy", max_cortes: int = 50):
         rendered_count = 0
 
         for row in cortes_info:
-            orig = row.get("arquivo_origem", "")
-            c_id = row.get("corte_id", "short_001")
-            ts_in = row.get("timestamp_inicio", "00:00:00")
-            dur = float(row.get("duracao_segundos", "45"))
+            orig = row.get("sermon_id", row.get("arquivo_origem", ""))
+            c_id = row.get("corte_id", row.get("tipo", "short"))
+            ts_in = str(row.get("start_time", row.get("timestamp_inicio", "00:00:00")))
+            dur = float(row.get("duracao", row.get("duracao_segundos", "45")))
             
             src_file = None
-            for ext in [".mp4", ".webm", ".mkv"]:
+            for ext in [".mp4", ".webm", ".mkv", ".mp3", ".wav"]:
                 p = videos_dir / f"{orig}{ext}"
                 if p.exists():
                     src_file = p
                     break
 
             if not src_file:
-                logger.debug(f"Mídia de vídeo para '{orig}' não encontrada para re-encoding 9:16. Pulando modo Studio.")
+                logger.debug(f"Mídia de vídeo/áudio para '{orig}' não encontrada para re-encoding 9:16. Pulando modo Studio.")
                 continue
 
             out_video = output_studio_video / f"{orig}_{c_id}_9x16.mp4"
-            start_sec = parse_timestamp_to_seconds(ts_in)
+            start_sec = float(ts_in) if ts_in.replace('.', '', 1).isdigit() else parse_timestamp_to_seconds(ts_in)
             end_sec = start_sec + dur
 
             try:
@@ -185,21 +188,24 @@ def executar_fase4(modo: str = "stream_copy", max_cortes: int = 50):
     gerar_copys_postagem(cortes_info, json_postagens, txt_postagens)
 
     print("\n" + "=" * 60)
-    print(" FASE 4 - RENDERIZACAO E PRODUCAO CONCLUIDA COM SUCESSO!")
+    print(" FASE 3 RENDERIZAÇÃO E PRODUÇÃO CONCLUÍDA COM SUCESSO!")
     print(f" * Modo executado: {modo}")
     print(f" * Cortes gerados em: '{output_stream_copy}'")
     print(f" * Grade e Copys salvas em: '{json_postagens}' e '{txt_postagens}'")
     print("=" * 60 + "\n")
 
 
+executar_fase4 = executar_fase3_renderizacao
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Executar Fase 4 - Renderização e Produção de Cortes IBPM CR")
+    parser = argparse.ArgumentParser(description="Executar Fase 3 - Renderização e Produção de Cortes IBPM CR")
     parser.add_argument("--modo", choices=["stream_copy", "studio_9x16", "full"], default="stream_copy",
                         help="Modo de processamento (stream_copy = 0.1s instantâneo, studio_9x16 = 9:16 vertical, full = ambos)")
     parser.add_argument("--max", type=int, default=50, help="Quantidade máxima de cortes a processar")
     args = parser.parse_args()
 
-    executar_fase4(modo=args.modo, max_cortes=args.max)
+    executar_fase3_renderizacao(modo=args.modo, max_cortes=args.max)
 
 
 if __name__ == "__main__":

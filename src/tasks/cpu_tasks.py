@@ -35,7 +35,7 @@ def task_render_video(self, payload_dict: dict, source_video_path: str) -> Dict[
     logger.info("Iniciando renderização de vídeo na cpu_queue", job_id=job_id, source=source_video_path)
 
     source_path = Path(source_video_path)
-    output_dir = Path("data/audio_podcasts/cortes_fase4")
+    output_dir = Path("data/audio_podcasts/cortes_fase3")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     export_id = payload_dict.get("export_id") or payload_dict.get("id_referencia") or "short_cut"

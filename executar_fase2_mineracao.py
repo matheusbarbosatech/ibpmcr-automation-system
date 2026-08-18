@@ -1,5 +1,5 @@
 """
-PIPELINE DE MINERAÇÃO DA FASE 3 (TEXTRANK + NMS + TIMESTAMPS EXATOS + PLAYLISTS)
+PIPELINE DE MINERAÇÃO DA FASE 2 MINERAÇÃO (TEXTRANK + NMS + TIMESTAMPS EXATOS + PLAYLISTS)
 IBPM CR AUTOMATION SYSTEM - Arquitetura Orientada a Objetos.
 """
 
@@ -23,26 +23,36 @@ from src.services.minerador_nlp import DualSermonMiner, PlaylistOrganizer
 from src.services.cortador_ffmpeg import FastStreamCopyCutter
 
 
-class PipelineMineracaoFase3:
+class PipelineMineracaoFase2:
     """
-    Classe orquestradora da Fase 3: Mineração, Clusterização e Cortes de Mídia.
+    Classe orquestradora da Fase 2 Mineração: Mineração Teológica/Extrativa, Clusterização e Cortes de Mídia.
     """
 
     EXTENSOES_MIDIA = {".webm", ".mp4", ".mkv", ".mp3", ".wav", ".m4a"}
 
     def __init__(self):
-        self.logger = get_logger("PipelineFase3")
+        self.logger = get_logger("PipelineFase2Mineracao")
         self.miner = DualSermonMiner()
         self.cutter = FastStreamCopyCutter()
 
-        # Definição de caminhos ATUALIZADOS
+        # Definição de caminhos para a Fase 2 Mineração
         self.pasta_base = BASE_DIR / "data" / "audio_podcasts"
         
-        self.dir_audios = self.pasta_base / "1.AUDIOS"
-        self.dir_transcricoes = self.pasta_base / "2.TRANSCRICOES"
-        self.dir_output = self.pasta_base / "3.CONTEUDOS"
+        self.dir_audios_candidatos = [
+            self.pasta_base / "1.AUDIOS",
+            self.pasta_base,
+            BASE_DIR / "data" / "audios",
+        ]
         
-        # Subpastas de Output
+        self.dir_transcricoes_candidatos = [
+            BASE_DIR / "data" / "transcriptions" / "json",
+            BASE_DIR / "data" / "transcriptions" / "txt",
+            BASE_DIR / "data" / "1.TRANSCRICOES",
+            self.pasta_base / "2.TRANSCRICOES",
+            self.pasta_base / "transcricoes",
+        ]
+
+        self.dir_output = self.pasta_base / "conteudos_fase2"
         self.dir_insights = self.dir_output / "insights_json"
         self.dir_cortes = self.dir_output / "cortes_finais"
         self.arq_csv = self.dir_output / "relatorio_cortes.csv"
@@ -59,48 +69,48 @@ class PipelineMineracaoFase3:
 
     def extrair_yt_id(self, nome_arquivo: str) -> str:
         """Extrai o ID do YouTube (11 caracteres) ignorando prefixos numéricos."""
-        # Procura por IDs com 11 caracteres que comumente têm _ ou - 
         match = re.search(r"([a-zA-Z0-9_-]{11})", Path(nome_arquivo).stem)
         return match.group(1) if match else Path(nome_arquivo).stem
 
     def mapear_acervo(self) -> Tuple[Dict[str, Path], Dict[str, Path]]:
         """
-        Mapeia os arquivos agrupando pelo ID do YouTube, resolvendo o problema
-        de TXT e JSON terem prefixos diferentes (ex: 004_culto vs 005_culto).
+        Mapeia os arquivos agrupando pelo ID do YouTube buscando nos diretórios candidatos.
         """
         mapa_transcricoes_bruto = {}
         mapa_midias_bruto = {}
         nomes_originais = {}
 
-        # 1. Mapeamento de Mídias (1.AUDIOS)
-        if self.dir_audios.exists():
-            for arq in self.dir_audios.iterdir():
-                if arq.is_file() and arq.suffix.lower() in self.EXTENSOES_MIDIA:
-                    yt_id = self.extrair_yt_id(arq.name)
-                    mapa_midias_bruto[yt_id] = arq
-                    nomes_originais[yt_id] = arq.stem  # Guarda o nome bonito para usar depois
+        # 1. Mapeamento de Mídias (Áudios)
+        for dir_audio in self.dir_audios_candidatos:
+            if dir_audio.exists():
+                for arq in dir_audio.iterdir():
+                    if arq.is_file() and arq.suffix.lower() in self.EXTENSOES_MIDIA:
+                        yt_id = self.extrair_yt_id(arq.name)
+                        if yt_id not in mapa_midias_bruto:
+                            mapa_midias_bruto[yt_id] = arq
+                            nomes_originais[yt_id] = arq.stem
 
-        # 2. Mapeamento de Transcrições (2.TRANSCRICOES)
+        # 2. Mapeamento de Transcrições
         formatos_texto = {".txt", ".srt", ".vtt"}
-        if self.dir_transcricoes.exists():
-            for arq in self.dir_transcricoes.iterdir():
-                if arq.is_file():
-                    ext = arq.suffix.lower()
-                    yt_id = self.extrair_yt_id(arq.name)
-                    
-                    if ext in formatos_texto:
-                        if yt_id not in mapa_transcricoes_bruto:
+        for dir_trans in self.dir_transcricoes_candidatos:
+            if dir_trans.exists():
+                for arq in dir_trans.iterdir():
+                    if arq.is_file():
+                        ext = arq.suffix.lower()
+                        yt_id = self.extrair_yt_id(arq.name)
+                        
+                        if ext in formatos_texto:
+                            if yt_id not in mapa_transcricoes_bruto:
+                                mapa_transcricoes_bruto[yt_id] = arq
+                        elif ext == ".json" and not arq.name.endswith(".insights.json"):
+                            # O JSON tem prioridade sobre TXT/SRT/VTT
                             mapa_transcricoes_bruto[yt_id] = arq
-                    elif ext == ".json" and not arq.name.endswith(".insights.json"):
-                        # O JSON sempre vence o TXT se tiver o mesmo ID de YouTube
-                        mapa_transcricoes_bruto[yt_id] = arq
 
         # 3. Consolidação Final
         mapa_final_transcricoes = {}
         mapa_final_midias = {}
         
         for yt_id, arq_trans in mapa_transcricoes_bruto.items():
-            # Usa o nome exato do áudio como ID do sermão, se não existir áudio, usa o do texto
             sermon_id = nomes_originais.get(yt_id, arq_trans.stem)
             mapa_final_transcricoes[sermon_id] = arq_trans
             
@@ -110,7 +120,7 @@ class PipelineMineracaoFase3:
         return mapa_final_transcricoes, mapa_final_midias
 
     def carregar_transcricao(self, caminho: Path) -> Tuple[str, List[dict]]:
-        """Lê de forma segura JSON, TXT, SRT ou VTT com parser agressivo."""
+        """Lê de forma segura JSON, TXT, SRT ou VTT com parser agressivo e fallback para TXT."""
         ext = caminho.suffix.lower()
         try:
             if ext == ".json":
@@ -120,34 +130,31 @@ class PipelineMineracaoFase3:
                 texto = ""
                 segmentos = []
                 
-                # 1. Se for um Dicionário (Formato padrão Whisper/Faster-Whisper)
                 if isinstance(dados, dict):
-                    # Caça o texto em qualquer chave comum
                     texto = dados.get("text", "") or dados.get("texto", "")
-                    segmentos = dados.get("segments", []) or dados.get("segmentos", [])
+                    segmentos = dados.get("segments", []) or dados.get("segmentos", []) or dados.get("transcript", []) or dados.get("transcricao", [])
                     
-                    # Se não tem a chave global de texto, junta as palavras dos segmentos
-                    if not texto and segmentos:
-                        texto = " ".join(s.get("text", "") for s in segmentos if isinstance(s, dict))
+                    if not texto and segmentos and isinstance(segmentos, list):
+                        texto = " ".join(s.get("text", "") if isinstance(s, dict) else str(s) for s in segmentos)
                         
-                # 2. Se for uma Lista (Algumas APIs retornam assim)
                 elif isinstance(dados, list):
                     segmentos = dados
-                    texto = " ".join(s.get("text", "") for s in dados if isinstance(s, dict))
+                    texto = " ".join(s.get("text", "") if isinstance(s, dict) else str(s) for s in dados)
                 
-                # Debug agressivo: se ainda estiver vazio, avisa o motivo exato
                 if not texto.strip():
-                    chaves_disp = list(dados.keys()) if isinstance(dados, dict) else "Lista"
-                    print(f"   ❌ [DEBUG] Arquivo JSON lido, mas não achei o texto. Chaves encontradas: {chaves_disp}")
-                    
-                return texto.strip(), segmentos
+                    # Fallback para o arquivo TXT correspondente caso exista
+                    txt_fallback = BASE_DIR / "data" / "transcriptions" / "txt" / f"{caminho.stem}.txt"
+                    if txt_fallback.exists():
+                        with open(txt_fallback, "r", encoding="utf-8", errors="ignore") as f_txt:
+                            texto = f_txt.read().strip()
+                
+                return texto.strip(), segmentos if isinstance(segmentos, list) else []
                     
             elif ext in {".txt", ".srt", ".vtt"}:
                 with open(caminho, "r", encoding="utf-8", errors="ignore") as f:
                     conteudo = f.read()
                     
                 if ext in {".srt", ".vtt"}:
-                    # Limpa as marcações de tempo das legendas
                     conteudo = re.sub(r'^WEBVTT.*\n', '', conteudo, flags=re.MULTILINE)
                     conteudo = re.sub(r'^\d+$\n', '', conteudo, flags=re.MULTILINE)
                     conteudo = re.sub(r'^\d{2}:\d{2}:\d{2}.*-->.*\n', '', conteudo, flags=re.MULTILINE)
@@ -164,27 +171,26 @@ class PipelineMineracaoFase3:
 
     def executar(self):
         print("=" * 75)
-        print("🚀 IBPM CR AUTOMATION - PIPELINE FASE 3 (ORIENTADO A OBJETOS)")
+        print("🚀 IBPM CR AUTOMATION - PIPELINE FASE 2 MINERAÇÃO (ORIENTADO A OBJETOS)")
         print("=" * 75)
 
         self.preparar_diretorios()
         mapa_trans, mapa_midias = self.mapear_acervo()
 
         if not mapa_trans:
-            print(f"⚠️ Nenhuma transcrição encontrada na pasta: \n{self.dir_transcricoes}\nEncerrando pipeline.")
+            print("⚠️ Nenhuma transcrição encontrada nas pastas candidatas. Encerrando pipeline.")
             return
 
         print(f"📂 Transcrições únicas agrupadas : {len(mapa_trans)}")
-        print(f"🎥 Mídias fonte validadas        : {len(mapa_midias)} em 1.AUDIOS\n")
+        print(f"🎥 Mídias fonte validadas        : {len(mapa_midias)}\n")
 
         sucessos = 0
 
         for idx, (sermon_id, caminho_arq) in enumerate(mapa_trans.items(), 1):
             print(f"[{idx:03d}/{len(mapa_trans):03d}] Minerando: {sermon_id} ({caminho_arq.suffix.upper()})")
             
-            # Validação de Mídia
             if sermon_id not in mapa_midias:
-                print(f"   ⚠️ Mídia original não encontrada para '{sermon_id}'. O FFmpeg não poderá cortá-lo.")
+                print(f"   ⚠️ Mídia original não encontrada para '{sermon_id}'. (Corte por FFmpeg dependerá da mídia).")
 
             texto, segmentos = self.carregar_transcricao(caminho_arq)
             if not texto:
@@ -192,10 +198,9 @@ class PipelineMineracaoFase3:
                 continue
 
             try:
-                # Chama o minerador com os parâmetros padrão originais
                 insights = self.miner.mine_sermon(transcript_text=texto, sermon_id=sermon_id)
 
-                # Salvar JSON do Culto com Insights
+                # Salvar JSON do Culto com Insights na Fase 2 Mineração
                 out_json = self.dir_insights / f"{sermon_id}.insights.json"
                 with open(out_json, "w", encoding="utf-8") as f:
                     json.dump(insights, f, ensure_ascii=False, indent=2)
@@ -255,14 +260,14 @@ class PipelineMineracaoFase3:
             except Exception as e:
                 print(f"⚠️ Erro no agrupamento de playlists: {e}")
 
-        # 3. Cortes Finais em Vídeo (FFmpeg)
+        # 3. Cortes Finais em Vídeo (FFmpeg) se houver mídias
         if self.arq_csv.exists() and sucessos > 0:
+            dir_audio_valid = next((d for d in self.dir_audios_candidatos if d.exists() and any(d.iterdir())), self.dir_audios_candidatos[0])
             print("🎬 Acionando FFmpeg FastStreamCopyCutter para fatiar as mídias...")
             try:
-                # O FFmpeg procura a mídia fonte na pasta 1.AUDIOS
                 self.cutter.cut_from_csv(
                     self.arq_csv,
-                    self.dir_audios,
+                    dir_audio_valid,
                     self.dir_cortes
                 )
             except Exception as e:
@@ -270,7 +275,7 @@ class PipelineMineracaoFase3:
 
         # Resumo Executivo
         print("\n" + "=" * 75)
-        print("                       🎉 RESUMO DA FASE 3")
+        print("                       🎉 RESUMO DA FASE 2 MINERAÇÃO")
         print("=" * 75)
         print(f"  • Cultos Processados com Sucesso : {sucessos} de {total}")
         print(f"  • Total de Cortes Catalogados    : {len(self.todos_cortes_csv)}")
@@ -278,6 +283,8 @@ class PipelineMineracaoFase3:
         print("=" * 75 + "\n")
 
 
+PipelineMineracaoFase3 = PipelineMineracaoFase2
+
 if __name__ == "__main__":
-    pipeline = PipelineMineracaoFase3()
+    pipeline = PipelineMineracaoFase2()
     pipeline.executar()

@@ -1,8 +1,8 @@
 """
-Gerenciador de Estado do Banco de Dados SQLite Relacional (Etapa 1, 2 e 3 - IBPM CR).
+Gerenciador de Estado do Banco de Dados SQLite Relacional (Etapa 1 e Etapa 2 Mineração - IBPM CR).
 
 Gerencia o inventário relacional de vídeos, salvando o índice sequencial (001 a 447+),
-status de download, transcrições e o acervo de insights minerados pela IA (Fase 3).
+status de download, transcrições e o acervo de insights minerados pela IA (Fase 2 Mineração).
 """
 
 import os
@@ -80,7 +80,7 @@ class MasterPlanManager:
             )
             """)
 
-            # Tabela da Fase 3: Acervo de Insights Minerados
+            # Tabela da Fase 2 Mineração: Acervo de Insights Minerados
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS acervo_insights (
                 video_id TEXT PRIMARY KEY,
@@ -156,8 +156,8 @@ class MasterPlanManager:
             """, (full_text, segments_json, tipo_transcricao, now_str, video_id))
             conn.commit()
 
-    def save_insights_fase3(self, video_id: str, idx: int, title: str, insights_dict: Dict[str, Any], raw_json: str) -> None:
-        """Salva os insights estruturados extraídos pelo LLM na tabela acervo_insights."""
+    def save_insights_fase2(self, video_id: str, idx: int, title: str, insights_dict: Dict[str, Any], raw_json: str) -> None:
+        """Salva os insights estruturados extraídos pelo LLM na tabela acervo_insights (Fase 2 Mineração)."""
         now_str = datetime.now(timezone.utc).isoformat()
         
         tema = str(insights_dict.get("01_tema_central", ""))
@@ -193,6 +193,8 @@ class MasterPlanManager:
             # Marca analisado_pln = 1 na tabela videos
             cursor.execute("UPDATE videos SET analisado_pln = 1, updated_at = ? WHERE video_id = ?", (now_str, video_id))
             conn.commit()
+
+    save_insights_fase3 = save_insights_fase2
 
     def is_insight_processed(self, video_id: str) -> bool:
         """Verifica se o vídeo já possui relatório na tabela acervo_insights."""

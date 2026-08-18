@@ -2,7 +2,7 @@
 Backend Server FastAPI - IBPM CR AUTOMATION SYSTEM.
 
 Fornece endpoints RESTful para ingestão por link do YouTube, mineração teológica desacoplada
-(Fase 2 Groq Whisper + Fase 3 Gemini Text), listagem do acervo de cultos e orquestração de renderização.
+(Fase 2 Mineração), listagem do acervo de cultos e orquestração de renderização.
 
 Execução no Terminal:
     uvicorn src.api.main_api:app --reload --port 8000
@@ -24,6 +24,7 @@ from src.core.state_manager import MasterPlanManager
 from src.infrastructure.gemini_client import TheologyMinerClient
 from src.services.theology_miner import DecoupledTheologyMinerService
 from src.services.video_pipeline import VideoPipelineService
+# pyrefly: ignore [missing-import]
 from baixar_culto import download_single_sermon_mp3
 
 logger = get_logger("FastAPIBackend")
@@ -128,7 +129,7 @@ def api_process_gemini_audio(req: ProcessGeminiRequest):
                 job_id=f"job_api_direct_{v_id}"
             )
 
-            insights_dir = Path("data/audio_podcasts/conteudos_fase3")
+            insights_dir = Path("data/audio_podcasts/conteudos_fase2")
             insights_dir.mkdir(parents=True, exist_ok=True)
             insight_path = insights_dir / f"{audio_path.stem}.insights.json"
             
@@ -137,7 +138,7 @@ def api_process_gemini_audio(req: ProcessGeminiRequest):
                 f.write(raw_json_str)
 
             state_mgr = MasterPlanManager()
-            state_mgr.save_insights_fase3(
+            state_mgr.save_insights_fase2(
                 video_id=v_id,
                 idx=1,
                 title=audio_path.stem,
@@ -162,7 +163,7 @@ def api_list_cultos():
     videos = state_mgr.get_all_videos()
 
     audio_dir = Path("data/audio_podcasts")
-    insights_dir = Path("data/audio_podcasts/conteudos_fase3")
+    insights_dir = Path("data/audio_podcasts/conteudos_fase2")
 
     results = []
     local_audios = {f.name: f for f in audio_dir.glob("*") if f.suffix.lower() in [".mp3", ".m4a", ".webm"]}
