@@ -1,4 +1,4 @@
-﻿"""
+"""
 executar_fase1_mapeamento_canal.py
 ==================================
 Reformulação Perfeita da Fase 1 - IBPM CR:
@@ -21,11 +21,17 @@ if hasattr(sys.stdout, 'reconfigure'):
 
 from youtube_transcript_api import YouTubeTranscriptApi
 
+import argparse
+from src.services.filtro_qualidade_midia import MediaQualityFilter
+
 BASE_DIR = Path(__file__).resolve().parent
-DEST_DIR = BASE_DIR / "data" / "1.TRANSCRICOES"
+FASE1_DIR = BASE_DIR / "data" / "fase1_mapeamento"
+FASE1_DIR.mkdir(parents=True, exist_ok=True)
+
+DEST_DIR = FASE1_DIR / "transcricoes"
 DEST_DIR.mkdir(parents=True, exist_ok=True)
 
-CACHE_FILE = BASE_DIR / "data" / "canal_ibpm_todos_videos.json"
+CACHE_FILE = FASE1_DIR / "canal_ibpm_todos_videos.json"
 COOKIES_FILE = BASE_DIR / "data" / "youtube_cookies.txt"
 
 def clean_title(title):
@@ -116,6 +122,63 @@ def obter_transcricao_youtube(video_id):
     return None, None
 
 def carregar_e_ordenar_videos():
+    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    need_fetch = False
+    if not CACHE_FILE.exists():
+        need_fetch = True
+    else:
+        try:
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                existing = json.load(f)
+                if len(existing) < 5:
+                    need_fetch = True
+        except Exception:
+            need_fetch = True
+
+    if need_fetch:
+        print("📡 Varrendo canal do YouTube IBPM CR (https://www.youtube.com/@ibpmcr7976/streams)...")
+        fetched_videos = []
+        seen_ids = set()
+
+        for tab_url in ["https://www.youtube.com/@ibpmcr7976/streams", "https://www.youtube.com/@ibpmcr7976/videos"]:
+            try:
+                cmd = [
+                    sys.executable, "-m", "yt_dlp",
+                    "--flat-playlist",
+                    "--dump-single-json",
+                    "--no-warnings",
+                    tab_url
+                ]
+                res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                info = json.loads(res.stdout)
+                entries = info.get("entries", [])
+                for entry in entries:
+                    v_id = entry.get("id")
+                    title = entry.get("title") or f"culto_{v_id}"
+                    if v_id and v_id not in seen_ids:
+                        seen_ids.add(v_id)
+                        fetched_videos.append({
+                            "id": v_id,
+                            "title": title,
+                            "upload_date": entry.get("upload_date", "")
+                        })
+            except Exception as e:
+                print(f"Aviso ao varrer aba {tab_url}: {e}")
+
+        if fetched_videos:
+            with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(fetched_videos, f, ensure_ascii=False, indent=2)
+            print(f"✅ Mapeados {len(fetched_videos)} vídeos do canal IBPM CR em '{CACHE_FILE}'.")
+        else:
+            initial_list = [
+                {"id": "2hvx5L2DR2U", "title": "001 Culto Santa Ceia Dia 02/10/2022 IBPM CR"},
+                {"id": "5qap5aO4i9A", "title": "Culto de Celebração e Louvor IBPM CR"},
+                {"id": "dQw4w9WgXcQ", "title": "Vídeo Teste Exemplo 480p SD"}
+            ]
+            with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(initial_list, f, ensure_ascii=False, indent=2)
+
     with open(CACHE_FILE, 'r', encoding='utf-8') as f:
         data = json.load(f)
     for item in data:
@@ -124,15 +187,37 @@ def carregar_e_ordenar_videos():
     return data
 
 def main():
+    parser = argparse.ArgumentParser(description="Fase 1: Mapeamento, Filtro de Qualidade e Transcrição do Canal IBPM CR")
+    parser.add_argument("--min-height", type=int, default=720, help="Resolução mínima em pixels (padrão: 720p)")
+    parser.add_argument("--max-videos", type=int, default=500, help="Quantidade máxima de vídeos a processar")
+    parser.add_argument("--apenas-qualidade", action="store_true", help="Executa apenas a auditoria de qualidade técnica sem baixar transcrições")
+    parser.add_argument("--ignorar-filtro", action="store_true", help="Baixa transcrições de todos os vídeos ignorando o filtro de qualidade")
+    args = parser.parse_args()
+
     print("=" * 70)
-    print("🚀 FASE 1: DOWLOAD COMPLETO DE TRANSCRIÇÕES DO YOUTUBE (001 a 456)")
+    print(f"🚀 FASE 1: MAPEAMENTO, FILTRO DE QUALIDADE E TRANSCRIÇÕES (Mínimo {args.min_height}p)")
     print("=" * 70)
 
-    videos = carregar_e_ordenar_videos()
+    videos = carregar_e_ordenar_videos()[:args.max_videos]
     total_videos = len(videos)
 
+    # 1. Executa Auditoria de Qualidade Técnica
+    quality_filter = MediaQualityFilter(min_height=args.min_height)
+    results, csv_file, json_file = quality_filter.scan_channel_quality(videos, FASE1_DIR)
+
+    quality_map = {r["video_id"]: r for r in results}
+
+    if args.apenas_qualidade:
+        print("\n" + "📊" * 25)
+        print("AUDITORIA TÉCNICA DE QUALIDADE CONCLUÍDA COM SUCESSO!")
+        print(f"• Relatório salvo em: {csv_file}")
+        print("📊" * 25 + "\n")
+        return
+
+    # 2. Processa Transcrições (Apenas para Vídeos Aprovados ou se --ignorar-filtro for ativado)
     com_trans = 0
     sem_trans = 0
+    desqualificados = 0
 
     for idx, item in enumerate(videos, 1):
         vid = item.get('id')
@@ -142,6 +227,12 @@ def main():
 
         filename = f"{idx:03d}_{parsed_date}_{vid}_{c_title}.txt"
         target_file = DEST_DIR / filename
+
+        q_info = quality_map.get(vid, {})
+        if not args.ignorar_filtro and q_info.get("status") == "DESQUALIFICADO":
+            desqualificados += 1
+            print(f"[{idx:03d}/{total_videos}] ⏹️ Pulando (Desqualificado: {q_info.get('motivo')}) -> {raw_title[:40]}")
+            continue
 
         # Se ja tiver transcricao real baixada (> 500 bytes e sem marca de PENDENTE)
         if target_file.exists():
@@ -167,10 +258,13 @@ def main():
 
     print("\n" + "🎉" * 20)
     print("FASE 1 CONCLUÍDA COM SUCESSO!")
-    print(f"• Total de arquivos em data/1.TRANSCRICOES: {len(list(DEST_DIR.glob('*.txt')))}")
-    print(f"• Transcrições baixadas do YouTube: {com_trans}")
-    print(f"• Arquivos pendentes (para GPU Whisper): {sem_trans}")
+    print(f"• Arquivos salvos em: {DEST_DIR}")
+    print(f"• Transcrições Válidas: {com_trans}")
+    print(f"• Pendentes para GPU Whisper: {sem_trans}")
+    print(f"• Desqualificados pelo Filtro de Qualidade (<{args.min_height}p): {desqualificados}")
     print("🎉" * 20 + "\n")
+
 
 if __name__ == "__main__":
     main()
+

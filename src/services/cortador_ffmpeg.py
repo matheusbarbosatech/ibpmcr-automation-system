@@ -54,23 +54,28 @@ class FastStreamCopyCutter:
             logger.error(f"Arquivo CSV não encontrado: {csv_file_path}")
             return cuts_generated
 
-        with open(csv_file_path, "r", encoding="utf-8") as f:
+        with open(csv_file_path, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
-            for row in reader:
-                orig = row.get("arquivo_origem", "")
-                c_id = row.get("corte_id", "corte_001")
-                ts_in = row.get("timestamp_inicio", "00:00:00")
-                dur = row.get("duracao_segundos", "45")
+            for idx, row in enumerate(reader):
+                orig = row.get("sermon_id") or row.get("arquivo_origem") or ""
+                c_id = row.get("corte_id") or f"corte_{idx+1:03d}"
+                c_id_clean = "".join(c for c in c_id if c.isalnum() or c in ("_", "-")).strip()
+                
+                ts_in = row.get("start_sec") or row.get("timestamp_inicio") or "0"
+                dur = row.get("duracao") or row.get("duracao_segundos") or "45"
+
+                if not orig:
+                    continue
 
                 # Localiza o arquivo de mídia de origem (.mp4, .webm, .mp3, .m4a)
                 src_file = None
-                for ext in [".mp4", ".webm", ".mp3", ".m4a"]:
+                for ext in [".mp4", ".webm", ".mkv", ".mp3", ".m4a", ".wav"]:
                     possible = videos_dir / f"{orig}{ext}"
-                    if possible.exists():
+                    if possible.is_file():
                         src_file = possible
                         break
                     possible_direct = videos_dir / orig
-                    if possible_direct.exists():
+                    if possible_direct.is_file():
                         src_file = possible_direct
                         break
 
@@ -78,7 +83,7 @@ class FastStreamCopyCutter:
                     logger.warning(f"⚠️ Mídia de origem para '{orig}' não encontrada em {videos_dir}. Pulando corte.")
                     continue
 
-                out_cut_file = output_dir / f"{src_file.stem}_{c_id}{src_file.suffix}"
+                out_cut_file = output_dir / f"{src_file.stem}_{c_id_clean}{src_file.suffix}"
 
                 start_sec = parse_timestamp_to_seconds(ts_in)
                 dur_sec = float(dur)

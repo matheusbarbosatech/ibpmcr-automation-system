@@ -9,7 +9,7 @@ import json
 import csv
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 # Suporte a UTF-8 nativo no terminal Windows
 if hasattr(sys.stdout, "reconfigure"):
@@ -30,10 +30,11 @@ class PipelineMineracaoFase2:
 
     EXTENSOES_MIDIA = {".webm", ".mp4", ".mkv", ".mp3", ".wav", ".m4a"}
 
-    def __init__(self):
+    def __init__(self, output_dir: Optional[Path] = None, filtro: Optional[str] = None):
         self.logger = get_logger("PipelineFase2Mineracao")
         self.miner = DualSermonMiner()
         self.cutter = FastStreamCopyCutter()
+        self.filtro = filtro
 
         # Definição de caminhos para a Fase 2 Mineração
         self.pasta_base = BASE_DIR / "data" / "audio_podcasts"
@@ -52,7 +53,11 @@ class PipelineMineracaoFase2:
             self.pasta_base / "transcricoes",
         ]
 
-        self.dir_output = self.pasta_base / "conteudos_fase2"
+        if output_dir:
+            self.dir_output = Path(output_dir).resolve()
+        else:
+            self.dir_output = self.pasta_base / "conteudos_fase2"
+
         self.dir_insights = self.dir_output / "insights_json"
         self.dir_cortes = self.dir_output / "cortes_finais"
         self.arq_csv = self.dir_output / "relatorio_cortes.csv"
@@ -177,8 +182,13 @@ class PipelineMineracaoFase2:
         self.preparar_diretorios()
         mapa_trans, mapa_midias = self.mapear_acervo()
 
+        if self.filtro:
+            mapa_trans = {k: v for k, v in mapa_trans.items() if self.filtro in k or self.filtro in v.name}
+            mapa_midias = {k: v for k, v in mapa_midias.items() if k in mapa_trans}
+            print(f"🔍 Filtro aplicado ('{self.filtro}'): {len(mapa_trans)} transcrição(ões) selecionada(s).")
+
         if not mapa_trans:
-            print("⚠️ Nenhuma transcrição encontrada nas pastas candidatas. Encerrando pipeline.")
+            print("⚠️ Nenhuma transcrição encontrada nas pastas candidatas (com os filtros atuais). Encerrando pipeline.")
             return
 
         print(f"📂 Transcrições únicas agrupadas : {len(mapa_trans)}")
@@ -231,20 +241,22 @@ class PipelineMineracaoFase2:
         
         # 1. Gerar Relatório CSV
         if self.todos_cortes_csv:
-            campos = ["sermon_id", "tipo", "start_time", "end_time", "duracao", "score", "titulo", "texto_trecho"]
+            campos = ["sermon_id", "tipo", "start_sec", "end_sec", "duracao", "score", "titulo", "texto_trecho"]
             with open(self.arq_csv, "w", encoding="utf-8-sig", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=campos)
                 writer.writeheader()
                 for c in self.todos_cortes_csv:
+                    st = float(c.get("start_sec", c.get("start", c.get("start_time", 0))))
+                    et = float(c.get("end_sec", c.get("end", c.get("end_time", 0))))
                     writer.writerow({
                         "sermon_id": c.get("sermon_id", ""),
                         "tipo": c.get("tipo", ""),
-                        "start_time": c.get("start", c.get("start_time", 0)),
-                        "end_time": c.get("end", c.get("end_time", 0)),
-                        "duracao": round(float(c.get("end", 0)) - float(c.get("start", 0)), 2),
+                        "start_sec": round(st, 2),
+                        "end_sec": round(et, 2),
+                        "duracao": round(et - st, 2),
                         "score": round(float(c.get("score", 0)), 3),
-                        "titulo": c.get("titulo", c.get("title", "Corte Automático")),
-                        "texto_trecho": c.get("text", c.get("texto", "")).replace("\n", " ")
+                        "titulo": c.get("title_hook_a", c.get("titulo", c.get("title", "Corte Automático"))),
+                        "texto_trecho": c.get("text_snippet", c.get("text", c.get("texto", ""))).replace("\n", " ")
                     })
             print(f"📊 Relatório CSV exportado com {len(self.todos_cortes_csv)} cortes mapeados.")
 
@@ -279,12 +291,22 @@ class PipelineMineracaoFase2:
         print("=" * 75)
         print(f"  • Cultos Processados com Sucesso : {sucessos} de {total}")
         print(f"  • Total de Cortes Catalogados    : {len(self.todos_cortes_csv)}")
-        print(f"  • Diretório de Entrega Final     : {self.dir_output.relative_to(BASE_DIR)}")
+        try:
+            rel_path = self.dir_output.relative_to(BASE_DIR)
+        except ValueError:
+            rel_path = self.dir_output
+        print(f"  • Diretório de Entrega Final     : {rel_path}")
         print("=" * 75 + "\n")
 
 
 PipelineMineracaoFase3 = PipelineMineracaoFase2
 
 if __name__ == "__main__":
-    pipeline = PipelineMineracaoFase2()
+    import argparse
+    parser = argparse.ArgumentParser(description="Pipeline Fase 2 Mineração IBPM CR Automation")
+    parser.add_argument("--filtro", "--arquivo", type=str, default=None, help="Filtra transcrição por prefixo ou ID (ex: 001)")
+    parser.add_argument("--output-dir", type=str, default=None, help="Diretório customizado de saída")
+    args = parser.parse_args()
+
+    pipeline = PipelineMineracaoFase2(output_dir=args.output_dir, filtro=args.filtro)
     pipeline.executar()
