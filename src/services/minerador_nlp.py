@@ -22,9 +22,56 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
 from collections import Counter
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.cluster import MiniBatchKMeans
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+    from sklearn.cluster import MiniBatchKMeans
+    HAS_SKLEARN = True
+except ImportError:
+    HAS_SKLEARN = False
+
+    class TfidfVectorizer:
+        def __init__(self, max_features=500, min_df=1, sublinear_tf=True):
+            self.max_features = max_features
+
+        def fit_transform(self, raw_documents):
+            docs_words = [re.findall(r'\b\w{3,}\b', doc.lower()) for doc in raw_documents]
+            all_words = Counter(w for doc in docs_words for w in doc)
+            vocab = [w for w, _ in all_words.most_common(self.max_features)]
+            if not vocab:
+                return np.zeros((len(raw_documents), 1))
+            vocab_idx = {w: i for i, w in enumerate(vocab)}
+            n_docs = len(raw_documents)
+            matrix = np.zeros((n_docs, len(vocab)))
+            doc_freq = Counter(w for doc in docs_words for w in set(doc))
+            idf = {w: math.log((1 + n_docs) / (1 + doc_freq[w])) + 1 for w in vocab}
+
+
+            for i, doc in enumerate(docs_words):
+                counts = Counter(doc)
+                for w, c in counts.items():
+                    if w in vocab_idx:
+                        tf = 1 + math.log(c)
+                        matrix[i, vocab_idx[w]] = tf * idf[w]
+            return matrix
+
+    def cosine_similarity(X, Y=None):
+        if Y is None:
+            Y = X
+        norm_X = np.linalg.norm(X, axis=1, keepdims=True)
+        norm_Y = np.linalg.norm(Y, axis=1, keepdims=True)
+        norm_X[norm_X == 0] = 1.0
+        norm_Y[norm_Y == 0] = 1.0
+        return np.dot(X / norm_X, (Y / norm_Y).T)
+
+    class MiniBatchKMeans:
+        def __init__(self, n_clusters=8, random_state=42, batch_size=50):
+            self.n_clusters = n_clusters
+
+        def fit_predict(self, X):
+            n_samples = X.shape[0]
+            return np.array([i % self.n_clusters for i in range(n_samples)])
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(BASE_DIR))

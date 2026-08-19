@@ -27,11 +27,12 @@ class MediaQualityFilter:
     Filtro de Qualidade de Mídia Automático para Mapeamento de Canal.
     """
 
-    def __init__(self, min_height: int = 720, min_fps: float = 20.0):
+    def __init__(self, min_height: int = 1080, min_fps: float = 20.0):
         self.min_height = min_height
         self.min_fps = min_fps
         self.yt_client = YTDLPClient()
-        logger.info(f"🛡️ Filtro de Qualidade de Mídia Inicializado (Resolução mín: {min_height}p, FPS mín: {min_fps}).")
+        logger.info(f"🛡️ Filtro de Qualidade de Mídia Inicializado (Resolução Mínima: {min_height}p Full HD / 4K, FPS mín: {min_fps}).")
+
 
     def analyze_video(self, video_url_or_id: str) -> Dict[str, Any]:
         """

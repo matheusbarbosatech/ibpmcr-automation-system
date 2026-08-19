@@ -6,9 +6,10 @@ cirúrgico de trechos de vídeos do YouTube via requisições HTTP de intervalo 
 evitando o download desnecessário de arquivos integrais de 2 horas.
 """
 
-import json
 import sys
 import os
+import re
+import json
 import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -95,13 +96,26 @@ class YTDLPClient:
             except Exception as e:
                 logger.warning("Falha na execução nativa do yt_dlp. Tentando fallback via subprocesso.", error=str(e))
 
-        # Estratégia 2: Fallback via Subprocess CLI do yt-dlp
+        format_str_4k = "315+140/401+140/308+140/400+140/299+140/399+140/137+140/bestvideo[height>=2160]+bestaudio/bestvideo[height>=1440]+bestaudio/bestvideo[height>=1080]+bestaudio/best"
+        import shutil
+        ffmpeg_exe = shutil.which("ffmpeg") or shutil.which("ffmpeg.exe") or settings.FFMPEG_BINARY_PATH
+        if ffmpeg_exe and Path(ffmpeg_exe).exists():
+            ffmpeg_location_arg = str(Path(ffmpeg_exe).resolve())
+        else:
+            ffmpeg_location_arg = "ffmpeg"
+
+        node_exe = shutil.which("node") or shutil.which("node.exe") or r"C:\Program Files\nodejs\node.exe"
+
+        # Estratégia 2: Fallback via Subprocess CLI do yt-dlp com web_embedded player client
         cmd = [
             sys.executable, "-m", "yt_dlp",
+            "--extractor-args", "youtube:player_client=web_embedded",
+            "--js-runtimes", f"node:{node_exe}",
+            "--remote-components", "ejs:github",
             "--download-sections", section_str,
-            "--format", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "-f", format_str_4k,
+            "--ffmpeg-location", ffmpeg_location_arg,
             "--force-keyframes-at-cuts",
-            "--extractor-args", "youtube:player_client=android,web",
             "--output", f"{filename_no_ext}.%(ext)s",
             video_url
         ]
@@ -127,20 +141,93 @@ class YTDLPClient:
         """
         output_path.parent.mkdir(parents=True, exist_ok=True)
         filename_no_ext = str(output_path.with_suffix(""))
+        parts = output_path.stem.split("_")
+        yt_id_match = next((p for p in parts if len(p) == 11 and re.match(r'^[a-zA-Z0-9_-]{11}$', p)), output_path.stem)
 
-        logger.info(f"📥 Disparando download do vídeo MP4 completo na MELHOR QUALIDADE: {video_url}", job_id=job_id)
+        # Se o vídeo já foi baixado completamente (> 10MB), reutiliza do cache
+        if output_path.exists() and output_path.stat().st_size > 10_000_000:
+            logger.info(f"✅ Vídeo completo 4K/HD já existe em cache local: {output_path} ({output_path.stat().st_size / (1024*1024):.1f} MB)", job_id=job_id)
+            return output_path
 
-        format_str = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+        # Limpa rigorosamente quaisquer arquivos parciais ou temporários (.f315.webm, .f401.mp4, .part, etc)
+        for item in list(output_path.parent.glob(f"*{yt_id_match}*")):
+            if item.resolve() != output_path.resolve():
+                try:
+                    item.unlink()
+                except Exception:
+                    pass
+
+        logger.info(f"📥 Disparando download do vídeo completo em 4K/1080p HD (Qualidade Máxima): {video_url}", job_id=job_id)
+
+        import shutil
+        ffmpeg_exe = shutil.which("ffmpeg") or shutil.which("ffmpeg.exe") or settings.FFMPEG_BINARY_PATH
+        if ffmpeg_exe and Path(ffmpeg_exe).exists():
+            ffmpeg_location_arg = str(Path(ffmpeg_exe).resolve())
+        else:
+            ffmpeg_location_arg = "ffmpeg"
+
+        node_exe = shutil.which("node") or shutil.which("node.exe") or r"C:\Program Files\nodejs\node.exe"
+
+        # Seletor universal de MÁXIMA QUALIDADE ABSOLUTA 4K -> 2K -> 1080p60 -> Best
+        format_str = "315+140/401+140/308+140/400+140/299+140/399+140/137+140/bestvideo[height>=2160]+bestaudio/bestvideo[height>=1440]+bestaudio/bestvideo[height>=1080]+bestaudio/best"
+
+        # Dispara via subprocess CLI (evita fallbacks do módulo Python)
+        cmd = [
+            sys.executable, "-m", "yt_dlp",
+            "--extractor-args", "youtube:player_client=web_embedded",
+            "--js-runtimes", f"node:{node_exe}",
+            "--remote-components", "ejs:github",
+            "--no-cache-dir",
+            "--rm-cache-dir",
+            "-f", format_str,
+            "--ffmpeg-location", ffmpeg_location_arg,
+            "--merge-output-format", "mp4",
+            "--no-continue",
+            "--force-overwrites",
+            "--postprocessor-args", "ffmpeg:-async 1 -vsync cfr",
+            "-o", f"{filename_no_ext}.%(ext)s",
+            video_url
+        ]
+
+
+
+        logger.info(f"⚡ Baixando stream 4K/2K nativa do YouTube via CLI...", job_id=job_id)
+        res = subprocess.run(cmd, capture_output=True, text=True)
+
+        if res.returncode != 0:
+            # Limpa parciais em caso de erro para não travar os próximos vídeos
+            for item in list(output_path.parent.glob(f"*{yt_id_match}*")):
+                if item.resolve() != output_path.resolve():
+                    try:
+                        item.unlink()
+                    except Exception:
+                        pass
+            logger.error(f"Falha no download 4K nativo: {res.stderr}", job_id=job_id)
+            raise RuntimeError(f"Erro ao baixar vídeo completo na melhor qualidade: {res.stderr}")
+
+        for ext in [".mp4", ".mkv", ".webm"]:
+            candidate = Path(f"{filename_no_ext}{ext}")
+            if candidate.exists() and candidate.stat().st_size > 1_000_000:
+                logger.info("✅ Download de alta qualidade 4K/2K concluído com sucesso via CLI", job_id=job_id, file=str(candidate))
+                return candidate
+
+        # Fallback yt_dlp nativo
 
         if HAS_YT_DLP:
             ydl_opts = {
                 'format': format_str,
                 'outtmpl': f"{filename_no_ext}.%(ext)s",
                 'merge_output_format': 'mp4',
+                'ffmpeg_location': str(ffmpeg_exe),
                 'quiet': False,
                 'no_warnings': True,
-                'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+                'format_sort': ['res:2160', 'res:1440', 'res:1080', 'fps:60', 'vbr', 'codec:vp9', 'codec:av01', 'aext:m4a'],
+                'postprocessor_args': {
+                    'ffmpeg': ['-async', '1', '-vsync', 'cfr']
+                }
             }
+
+
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([video_url])
@@ -148,25 +235,13 @@ class YTDLPClient:
                 for ext in [".mp4", ".mkv", ".webm"]:
                     candidate = Path(f"{filename_no_ext}{ext}")
                     if candidate.exists() and candidate.stat().st_size > 50000:
-                        logger.info("✅ Download de alta qualidade concluído com sucesso", job_id=job_id, file=str(candidate))
+                        logger.info("✅ Download de alta qualidade 4K/2K concluído via módulo Python", job_id=job_id, file=str(candidate))
                         return candidate
             except Exception as e:
-                logger.warning(f"Falha yt_dlp nativo: {e}. Tentando fallback subprocess CLI...")
+                logger.error(f"Falha no download 4K nativo: {e}")
 
-        # Subprocess CLI fallback
-        cmd = [
-            sys.executable, "-m", "yt_dlp",
-            "-f", format_str,
-            "--merge-output-format", "mp4",
-            "-o", f"{filename_no_ext}.%(ext)s",
-            video_url
-        ]
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        for ext in [".mp4", ".mkv", ".webm"]:
-            candidate = Path(f"{filename_no_ext}{ext}")
-            if candidate.exists() and candidate.stat().st_size > 50000:
-                logger.info("✅ Download de alta qualidade concluído via CLI", job_id=job_id, file=str(candidate))
-                return candidate
+
+
 
         raise RuntimeError(f"Erro ao baixar vídeo completo na melhor qualidade: {res.stderr}")
 

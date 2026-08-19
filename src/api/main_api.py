@@ -14,8 +14,11 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI, HTTPException
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
 from fastapi.staticfiles import StaticFiles
 
 from src.core.config import settings
@@ -100,7 +103,7 @@ def api_process_gemini_audio(req: ProcessGeminiRequest):
     logger.info("Solicitação de Mineração Teológica Desacoplada recebida", audio=str(audio_path))
 
     if not audio_path.exists():
-        candidate = Path("data/audio_podcasts") / audio_path.name
+        candidate = Path("data/audios") / audio_path.name
         if candidate.exists():
             audio_path = candidate
         else:
@@ -129,7 +132,7 @@ def api_process_gemini_audio(req: ProcessGeminiRequest):
                 job_id=f"job_api_direct_{v_id}"
             )
 
-            insights_dir = Path("data/audio_podcasts/conteudos_fase2")
+            insights_dir = Path("data/fase2_mineracao/insights_json")
             insights_dir.mkdir(parents=True, exist_ok=True)
             insight_path = insights_dir / f"{audio_path.stem}.insights.json"
             
@@ -162,8 +165,8 @@ def api_list_cultos():
     state_mgr = MasterPlanManager()
     videos = state_mgr.get_all_videos()
 
-    audio_dir = Path("data/audio_podcasts")
-    insights_dir = Path("data/audio_podcasts/conteudos_fase2")
+    audio_dir = Path("data/audios")
+    insights_dir = Path("data/fase2_mineracao/insights_json")
 
     results = []
     local_audios = {f.name: f for f in audio_dir.glob("*") if f.suffix.lower() in [".mp3", ".m4a", ".webm"]}

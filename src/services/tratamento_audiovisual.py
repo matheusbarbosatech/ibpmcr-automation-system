@@ -45,11 +45,13 @@ class AutoAudiovisualEnhancer:
         4. loudnorm (normalização broadcast EBU R128 no padrão Reels/Shorts)
         """
         return (
+            f"aresample=async=1,"
             f"highpass=f=80:poles=2,"
             f"equalizer=f=3000:width_type=h:width=1500:g=2.5,"
             f"acompressor=threshold=-18dB:ratio=3:attack=10:release=100:makeup=2,"
             f"loudnorm=I={target_lufs}:TP=-1.5:LRA=11:linear=true"
         )
+
 
     def build_video_enhancement_filter(self, crop_expr: str = "crop=ih*(9/16):ih:(iw-ow)/2:0", is_vertical: bool = True) -> str:
         """
@@ -61,13 +63,14 @@ class AutoAudiovisualEnhancer:
         filters = []
         if is_vertical:
             filters.append(crop_expr)
-            filters.append("scale=1080:1920:force_original_aspect_ratio=increase")
+            filters.append("scale=1080:1920:flags=lanczos:force_original_aspect_ratio=increase")
             filters.append("crop=1080:1920")
 
         # Realce de Cores da Igreja & Contraste
         filters.append("eq=contrast=1.06:brightness=0.01:saturation=1.12")
         # Nitidez de Alta Definição (Unsharp Masking)
-        filters.append("unsharp=luma_msize_x=5:luma_msize_y=5:luma_amount=0.8")
+        filters.append("unsharp=luma_msize_x=5:luma_msize_y=5:luma_amount=0.9")
+
 
         filters.append("fps=30")
         filters.append("format=yuv420p")
@@ -85,7 +88,9 @@ class AutoAudiovisualEnhancer:
             "-i", str(cover_jpg),
             "-map", "0",
             "-map", "1",
-            "-c", "copy",
+            "-c:v:0", "copy",
+            "-c:a", "copy",
+            "-c:v:1", "mjpeg",
             "-disposition:v:1", "attached_pic",
             str(temp_out)
         ]

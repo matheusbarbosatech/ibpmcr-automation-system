@@ -9,22 +9,96 @@ credenciais de APIs (Google, Meta), brokers (Celery/RabbitMQ/Redis) e binários 
 import os
 from pathlib import Path
 from typing import Optional
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+try:
+    from pydantic import Field
+    # pyrefly: ignore [missing-import]
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+    HAS_PYDANTIC_SETTINGS = True
+except ImportError:
+    HAS_PYDANTIC_SETTINGS = False
 
-class Settings(BaseSettings):
-    """
-    Configuração Centralizada e Tipada da Aplicação.
-    """
-    model_config = SettingsConfigDict(
-        env_file=str(BASE_DIR / ".env"),
-        env_file_encoding="utf-8",
-        extra="ignore",
-        case_sensitive=False
-    )
+if HAS_PYDANTIC_SETTINGS:
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=str(BASE_DIR / ".env"),
+            env_file_encoding="utf-8",
+            extra="ignore",
+            case_sensitive=False
+        )
+
+        ENVIRONMENT: str = Field(default="development")
+        LOG_LEVEL: str = Field(default="INFO")
+        APP_TIMEZONE: str = Field(default="America/Sao_Paulo")
+        CELERY_BROKER_URL: str = Field(default="amqp://admin:admin_password@localhost:5672//")
+        CELERY_RESULT_BACKEND: str = Field(default="redis://:redis_password@localhost:6379/0")
+        DATABASE_URL: str = Field(default="sqlite:///./data/database/ibpm_core.db")
+        GOOGLE_API_KEY: str = Field(default="")
+        GEMINI_API_KEY: str = Field(default="")
+        GOOGLE_GEMINI_MODEL: str = Field(default="gemini-flash-latest")
+        GROQ_API_KEY: str = Field(default="")
+        YOUTUBE_API_KEY: str = Field(default="")
+        YOUTUBE_CHANNEL_ID: str = Field(default="UCHhLxWRcCB-xKo0ifOQ8MVQ")
+        YOUTUBE_CHANNEL_HANDLE: str = Field(default="@ibpmcr7976")
+        YOUTUBE_UPLOADS_PLAYLIST: str = Field(default="UUHhLxWRcCB-xKo0ifOQ8MVQ")
+        YOUTUBE_CLIENT_SECRETS_FILE: str = Field(default="./credentials/client_secret_google.json")
+        YOUTUBE_TOKEN_PATH: str = Field(default="./credentials/youtube_token.pickle")
+        GOOGLE_DRIVE_FOLDER_ID: str = Field(default="")
+        INSTAGRAM_ACCESS_TOKEN: str = Field(default="")
+        INSTAGRAM_ACCOUNT_ID: str = Field(default="")
+        FFMPEG_BINARY_PATH: str = Field(default="ffmpeg")
+        FFPROBE_BINARY_PATH: str = Field(default="ffprobe")
+        RCLONE_CONFIG_PATH: str = Field(default="")
+        RCLONE_REMOTE_NAME: str = Field(default="meudrive")
+        DATA_DIR: Path = Field(default_factory=lambda: BASE_DIR / "data")
+        CACHE_DIR: Path = Field(default_factory=lambda: BASE_DIR / "data" / "cache")
+        OUTPUT_DIR: Path = Field(default_factory=lambda: BASE_DIR / "data" / "output")
+        LOGS_DIR: Path = Field(default_factory=lambda: BASE_DIR / "logs")
+
+        def create_required_directories(self) -> None:
+            self.DATA_DIR.mkdir(parents=True, exist_ok=True)
+            self.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            self.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+else:
+    class Settings:
+        ENVIRONMENT: str = "development"
+        LOG_LEVEL: str = "INFO"
+        APP_TIMEZONE: str = "America/Sao_Paulo"
+        CELERY_BROKER_URL: str = "amqp://admin:admin_password@localhost:5672//"
+        CELERY_RESULT_BACKEND: str = "redis://:redis_password@localhost:6379/0"
+        DATABASE_URL: str = "sqlite:///./data/database/ibpm_core.db"
+        GOOGLE_API_KEY: str = ""
+        GEMINI_API_KEY: str = ""
+        GOOGLE_GEMINI_MODEL: str = "gemini-flash-latest"
+        GROQ_API_KEY: str = ""
+        YOUTUBE_API_KEY: str = ""
+        YOUTUBE_CHANNEL_ID: str = "UCHhLxWRcCB-xKo0ifOQ8MVQ"
+        YOUTUBE_CHANNEL_HANDLE: str = "@ibpmcr7976"
+        YOUTUBE_UPLOADS_PLAYLIST: str = "UUHhLxWRcCB-xKo0ifOQ8MVQ"
+        YOUTUBE_CLIENT_SECRETS_FILE: str = "./credentials/client_secret_google.json"
+        YOUTUBE_TOKEN_PATH: str = "./credentials/youtube_token.pickle"
+        GOOGLE_DRIVE_FOLDER_ID: str = ""
+        INSTAGRAM_ACCESS_TOKEN: str = ""
+        INSTAGRAM_ACCOUNT_ID: str = ""
+        FFMPEG_BINARY_PATH: str = "ffmpeg"
+        FFPROBE_BINARY_PATH: str = "ffprobe"
+        RCLONE_CONFIG_PATH: str = ""
+        RCLONE_REMOTE_NAME: str = "meudrive"
+        DATA_DIR: Path = BASE_DIR / "data"
+        CACHE_DIR: Path = BASE_DIR / "data" / "cache"
+        OUTPUT_DIR: Path = BASE_DIR / "data" / "output"
+        LOGS_DIR: Path = BASE_DIR / "logs"
+
+        def create_required_directories(self) -> None:
+            self.DATA_DIR.mkdir(parents=True, exist_ok=True)
+            self.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            self.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
 
     # -------------------------------------------------------------------------
     # 1. CORE APPLICATION CONFIGURATION

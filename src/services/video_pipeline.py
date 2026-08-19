@@ -146,7 +146,7 @@ class VideoPipelineService:
         ])
         generate_ass_subtitle_file(words_sample, ass_path)
 
-        output_dir = Path("data/audio_podcasts/cortes_fase3")
+        output_dir = Path("data/fase3_renderizacao/cortes_finais")
         output_dir.mkdir(parents=True, exist_ok=True)
         final_video_path = output_dir / f"{cut_id}_9x16.mp4"
 
@@ -192,7 +192,7 @@ class VideoPipelineService:
             job_id=job_id
         )
 
-        output_dir = Path("data/audio_podcasts/cortes_fase3")
+        output_dir = Path("data/fase3_renderizacao/cortes_finais")
         output_dir.mkdir(parents=True, exist_ok=True)
         final_video_path = output_dir / f"{cut_id}_16x9.mp4"
 

@@ -7,9 +7,15 @@ suave de câmera sem tremores em telas verticais (1080x1920).
 """
 
 import os
-import cv2
 import numpy as np
 from typing import Tuple, Optional
+
+try:
+    # pyrefly: ignore [missing-import]
+    import cv2
+    HAS_OPENCV = True
+except ImportError:
+    HAS_OPENCV = False
 
 try:
     # pyrefly: ignore [missing-import]
@@ -21,6 +27,7 @@ except ImportError:
 from src.core.logger import get_logger
 
 logger = get_logger("SmoothAutoReframe")
+
 
 
 class SmoothAutoReframe:
@@ -55,7 +62,7 @@ class SmoothAutoReframe:
             except Exception as e:
                 logger.warning("Falha ao inicializar MediaPipe. Tentando fallback OpenCV HaarCascade.", error=str(e))
 
-        if not self.face_detector:
+        if not self.face_detector and HAS_OPENCV:
             try:
                 cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
                 if os.path.exists(cascade_path):
@@ -63,6 +70,7 @@ class SmoothAutoReframe:
                     logger.info("Detector Facial OpenCV HaarCascade inicializado como fallback.")
             except Exception as e:
                 logger.warning(f"Não foi possível carregar o detector HaarCascade: {e}")
+
 
     def process_frame(self, frame: np.ndarray) -> Tuple[int, int, int, int]:
         """
@@ -143,8 +151,9 @@ class SmoothAutoReframe:
         Amostra o vídeo durante o intervalo do corte e calcula a posição X ideal de enquadramento.
         Retorna a expressão de crop do FFmpeg `crop=w:h:x:y`.
         """
-        if not os.path.exists(video_path):
+        if not HAS_OPENCV or not os.path.exists(video_path):
             return "crop=ih*(9/16):ih:(iw-ow)/2:0"
+
 
         # Reseta o centro anterior para a nova amostragem
         self.prev_center_x = None

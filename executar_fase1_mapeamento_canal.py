@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
+# pyrefly: ignore [missing-import]
 from youtube_transcript_api import YouTubeTranscriptApi
 
 import argparse
@@ -188,8 +189,9 @@ def carregar_e_ordenar_videos():
 
 def main():
     parser = argparse.ArgumentParser(description="Fase 1: Mapeamento, Filtro de Qualidade e Transcrição do Canal IBPM CR")
-    parser.add_argument("--min-height", type=int, default=720, help="Resolução mínima em pixels (padrão: 720p)")
+    parser.add_argument("--min-height", type=int, default=1080, help="Resolução mínima em pixels (padrão: 1080p Full HD / 4K)")
     parser.add_argument("--max-videos", type=int, default=500, help="Quantidade máxima de vídeos a processar")
+
     parser.add_argument("--apenas-qualidade", action="store_true", help="Executa apenas a auditoria de qualidade técnica sem baixar transcrições")
     parser.add_argument("--ignorar-filtro", action="store_true", help="Baixa transcrições de todos os vídeos ignorando o filtro de qualidade")
     args = parser.parse_args()

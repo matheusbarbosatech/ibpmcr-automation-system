@@ -105,9 +105,10 @@ ibpmcr-automation-system/
 │
 ├── 📂 config/                              # Dicionários de temas, versículos e configurações
 ├── 📂 data/                                # Acervo e dados locais
-│   ├── 1.TRANSCRICOES/                     # Armazenamento das transcrições JSON/TXT
-│   ├── audio_podcasts/                     # Áudios MP3 leves destinados à transcrição em GPU
-│   └── canal_ibpm_todos_videos.json        # Mapeamento consolidado do canal do YouTube
+│   ├── fase1_mapeamento/                   # Inventário de vídeos, auditoria de qualidade e transcrições
+│   ├── fase2_mineracao/                    # Relatório de cortes CSV, JSONs de insights e playlists
+│   └── fase3_renderizacao/                 # Cortes finais em vídeo e metadados de postagem
+
 │
 ├── 📂 notebooks/                           # Notebooks e scripts de processamento em GPU na Nuvem
 │   └── kaggle_gpu_transcribe/              # Notebook e script para Faster-Whisper GPU no Kaggle

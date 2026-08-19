@@ -8,11 +8,22 @@ badge de categoria e branding da igreja (@ibpmcr).
 
 import os
 import sys
-import cv2
 import numpy as np
 from pathlib import Path
 from typing import Optional
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+try:
+    # pyrefly: ignore [missing-import]
+    import cv2
+    HAS_OPENCV = True
+except ImportError:
+    HAS_OPENCV = False
+
+try:
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(BASE_DIR))
@@ -20,6 +31,7 @@ sys.path.append(str(BASE_DIR))
 from src.core.logger import get_logger
 
 logger = get_logger("CoverGenerator")
+
 
 
 class CoverGenerator:
@@ -36,10 +48,11 @@ class CoverGenerator:
         """
         Extrai o frame mais límpido da mídia no timestamp especificado.
         """
-        if not video_path.exists():
-            raise FileNotFoundError(f"Vídeo de origem não encontrado: {video_path}")
+        if not HAS_OPENCV or not HAS_PIL or not video_path.exists():
+            raise RuntimeError(f"OpenCV/PIL não disponível ou vídeo de origem não encontrado: {video_path}")
 
         cap = cv2.VideoCapture(str(video_path))
+
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         target_frame = int(timestamp_sec * fps)
 

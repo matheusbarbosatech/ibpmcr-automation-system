@@ -52,8 +52,8 @@ class DecoupledTheologyMinerService:
             audio=audio_file_path.name
         )
 
-        trans_dir1 = Path("data/audio_podcasts/transcricoes")
-        trans_dir2 = Path("data/audio_podcasts/transcricoes_fase2")
+        trans_dir1 = Path("data/fase1_mapeamento/transcricoes/txt")
+        trans_dir2 = Path("data/fase1_mapeamento/transcricoes/json")
         trans_dir1.mkdir(parents=True, exist_ok=True)
         trans_dir2.mkdir(parents=True, exist_ok=True)
 
@@ -64,11 +64,11 @@ class DecoupledTheologyMinerService:
 
         # STEP 1: Verifica se a transcrição local (.txt ou .srt) existe nas pastas do acervo
         if txt_path1.exists() and txt_path1.stat().st_size > 50:
-            logger.info("📄 Transcrição .txt encontrada em data/audio_podcasts/transcricoes. Usando texto off-line.", file=txt_path1.name)
+            logger.info("📄 Transcrição .txt encontrada em data/fase1_mapeamento/transcricoes/txt. Usando texto off-line.", file=txt_path1.name)
             with open(txt_path1, "r", encoding="utf-8", errors="ignore") as f:
                 transcript_text = f.read()
         elif txt_path2.exists() and txt_path2.stat().st_size > 50:
-            logger.info("📄 Transcrição .txt encontrada em data/audio_podcasts/transcricoes_fase2. Usando texto off-line.", file=txt_path2.name)
+            logger.info("📄 Transcrição .txt encontrada em data/fase1_mapeamento/transcricoes/json. Usando texto off-line.", file=txt_path2.name)
             with open(txt_path2, "r", encoding="utf-8", errors="ignore") as f:
                 transcript_text = f.read()
         elif srt_path.exists() and srt_path.stat().st_size > 50:
@@ -110,9 +110,10 @@ class DecoupledTheologyMinerService:
             )
 
         # STEP 3: Persiste o JSON dos insights minerados na pasta da Fase 2 Mineração
-        insights_dir = Path("data/audio_podcasts/conteudos_fase2")
+        insights_dir = Path("data/fase2_mineracao/insights_json")
         insights_dir.mkdir(parents=True, exist_ok=True)
         out_file = insights_dir / f"{audio_file_path.stem}.insights.json"
+
 
         with open(out_file, "w", encoding="utf-8") as f:
             json.dump(mining_payload_dict, f, ensure_ascii=False, indent=2)
