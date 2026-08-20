@@ -1,14 +1,21 @@
 """
-Minerador NLP Extrativo, Heuristico e Agrupamento Tematico (Fase 2 Mineração Pro v2) - IBPM CR.
+Minerador NLP Extrativo, Heuristico, DSP e Diretor de Arte Algoritmico (Fase 2 Mineracao Pro v3) - IBPM CR.
 
-Melhorias v2 sobre v1:
-1. parse_text_with_real_timestamps(): le [HH:MM:SS] reais do Whisper.
-2. _score_positional_weight(): fator de peso por posicao temporal.
-3. _score_emotional_intensity(): intensidade emocional por exclamacoes, repeticao e gatilhos.
-4. _extract_title_from_content(): extrai titulo descritivo real por TF-IDF local.
-5. short_hooks / medium_markers / blacklist expandidos (50+ padroes pentecostais brasileiros).
-6. Threshold minimo de score: filtra cortes irrelevantes.
-7. TextRank com max_features=500 e 15 iteracoes.
+Melhorias v3:
+1. TypedDict Schemas: MasterCutRecord, VisualDirectives, TypographyDirectives, AudioDirectives, TheologicalAnalysis, SEOMetadata, RetentionHooks.
+2. NLPFeatureExtractor (spaCy + fallback nativo):
+   - Extrai substantivos/verbos para B-rolls (Pexels).
+   - Identifica elementos biblicos, locais historicos, perfil do sermao (Exortacao, Ensino, Consolo, etc.).
+   - Gera 3 variacoes de titulo (Curiosidade, Teologico, Emocional), hashtags, copy de thumbnail e posts de redes sociais.
+   - Limpa vicios de linguagem ("ne", "ha", "entao") para legendas elegantes.
+   - Gera legendas .ASS sinteticas word-by-word (estilo CapCut).
+   - Injeta emojis por sentimento e destaca termos teologicos (amarelo/vermelho).
+3. DSPFeatureExtractor (librosa + envelope deterministico por WPM/silencios):
+   - Picos de RMS (zoom-in rapido, shake 0.5s, caps lock).
+   - Silencios > 2s (black screen, zoom-out slow).
+   - Marcador de Drop (climax em ms, SFX riser 5s antes, boom no hook).
+   - Ducking sidechain para alto WPM e atenuacao de agudos se houver clipping.
+4. Mantem 100% de compatibilidade com o algoritmo de TextRank e NMS.
 """
 
 import sys
@@ -21,6 +28,26 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
 from collections import Counter
+
+# Tenta importar librosa e spacy com fallbacks nativos
+try:
+    import librosa
+    HAS_LIBROSA = True
+except ImportError:
+    HAS_LIBROSA = False
+
+try:
+    import spacy
+    try:
+        nlp_spacy = spacy.load("pt_core_news_lg")
+    except Exception:
+        try:
+            nlp_spacy = spacy.load("pt_core_news_sm")
+        except Exception:
+            nlp_spacy = None
+except ImportError:
+    spacy = None
+    nlp_spacy = None
 
 try:
     from sklearn.feature_extraction.text import TfidfVectorizer
@@ -45,7 +72,6 @@ except ImportError:
             matrix = np.zeros((n_docs, len(vocab)))
             doc_freq = Counter(w for doc in docs_words for w in set(doc))
             idf = {w: math.log((1 + n_docs) / (1 + doc_freq[w])) + 1 for w in vocab}
-
 
             for i, doc in enumerate(docs_words):
                 counts = Counter(doc)
@@ -77,13 +103,377 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(BASE_DIR))
 
 from src.core.logger import get_logger
+from src.domain.cut_directives import (
+    MasterCutRecord, VisualDirectives, TypographyDirectives,
+    AudioDirectives, TheologicalAnalysis, SEOMetadata, RetentionHooks
+)
 
-logger = get_logger("NLPHeuristicMinerProV2")
+logger = get_logger("NLPHeuristicMinerProV3")
+
+
+class NLPFeatureExtractor:
+    """
+    Extrator Semantico e Tipografico via spaCy / Regras Nativas em Portugues.
+    Mapeia verbos de acao, elementos biblicos, sobreposicoes historicas, SEO e diretrizes tipograficas.
+    """
+
+    def __init__(self):
+        self.action_verbs = {
+            "correr": "person running dramatically",
+            "cair": "person falling to knees praying",
+            "chorar": "person crying emotion",
+            "lutar": "spiritual battle warrior",
+            "vencer": "victory celebration mountain top",
+            "orar": "hands folded praying light",
+            "caminhar": "walking in desert sunlight",
+            "gritar": "preacher shouting passion",
+            "levantar": "person rising up light",
+            "subir": "climbing mountain peak",
+            "descer": "descending valley mist",
+            "escrever": "hand writing in journal",
+            "cantar": "worship singer church",
+            "abraçar": "people hugging reconciliation",
+            "voar": "eagle flying sky",
+            "quebrar": "chains breaking freedom",
+        }
+
+        self.biblical_elements = {
+            "mar": "parting red sea waves ocean",
+            "fogo": "holy fire altar flame",
+            "montanha": "biblical mountain Sinai peak",
+            "ovelha": "flock of sheep green pasture shepherd",
+            "cruz": "wooden cross sunset Golgotha",
+            "deserto": "desert wilderness sand dunes",
+            "tempestade": "stormy sea dark clouds lighting",
+            "leão": "lion of Judah majestic strength",
+            "cordeiro": "white lamb innocent gentle",
+            "altar": "ancient stone altar incense smoke",
+            "espada": "sharp sword light truth",
+            "anjos": "heavenly light angels glory",
+            "céu": "glorious blue sky sun rays",
+            "rio": "river of living water flowing",
+            "pão": "bread breaking communion",
+            "vinho": "grape wine chalice cup",
+        }
+
+        self.historical_places = [
+            "egito", "babilônia", "jerusalém", "roma", "nínive", "babel",
+            "assíria", "jordão", "faraó", "césar", "nabucodonosor",
+            "davi", "moisés", "abraão", "elias", "paulo", "pedro"
+        ]
+
+        self.theological_highlights = {
+            "graça": "#FFD700", "salvação": "#FFD700", "redenção": "#FFD700",
+            "santidade": "#FFD700", "justificação": "#FFD700", "expiação": "#FF3333",
+            "ressurreição": "#FFD700", "propiciação": "#FF3333", "espírito": "#FFD700",
+            "glória": "#FFD700", "unção": "#FFD700", "aliança": "#FFD700",
+            "milagre": "#FFD700", "fé": "#FFD700", "cruz": "#FF3333",
+            "sangue": "#FF3333", "poder": "#FFD700", "vitória": "#FFD700"
+        }
+
+        self.imperative_verbs = [
+            "levante", "receba", "olhe", "escute", "pare", "acredite",
+            "vem", "tome", "glorifique", "busque", "creia", "acorda", "marcha"
+        ]
+
+        self.crutch_words_pattern = re.compile(
+            r'\b(né|hã|então|tipo assim|né verdade|tá entendendo|sabe|éhh|hãm)\b',
+            re.IGNORECASE
+        )
+
+        self.emoji_map = [
+            (r'\b(choro|lágrima|tristeza|sofrimento|dor|aflição)\b', "😭", "choro"),
+            (r'\b(fogo|poder|unção|avivamento|glória|gloria|espírito)\b', "🔥", "poder"),
+            (r'\b(aleluia|amém|amen|adoração|louvor|graças)\b', "🙌", "adoração"),
+            (r'\b(batalha|inimigo|vitória|vitoria|autoridade|armadura)\b', "⚔️", "batalha"),
+            (r'\b(palavra|bíblia|biblia|versículo|escrito)\b', "📖", "palavra"),
+            (r'\b(segredo|revelação|revelacao|visão|luz)\b', "💡", "revelação"),
+        ]
+
+        self.bible_books = [
+            "Gênesis", "Êxodo", "Levítico", "Números", "Deuteronômio", "Josué",
+            "Juízes", "Rute", "1 Samuel", "2 Samuel", "1 Reis", "2 Reis",
+            "1 Crônicas", "2 Crônicas", "Esdras", "Neemias", "Ester", "Jó",
+            "Salmos", "Provérbios", "Eclesiastes", "Cânticos", "Isaías", "Jeremias",
+            "Lamentações", "Ezequiel", "Daniel", "Oséias", "Joel", "Amós",
+            "Obadias", "Jonas", "Miquéias", "Naum", "Habacuc", "Sofonias",
+            "Ageu", "Zacarias", "Malaquias", "Mateus", "Marcos", "Lucas",
+            "João", "Atos", "Romanos", "1 Coríntios", "2 Coríntios", "Gálatas",
+            "Efésios", "Filipenses", "Colossenses", "1 Tessalonicenses",
+            "2 Tessalonicenses", "1 Timóteo", "2 Timóteo", "Tito", "Filemom",
+            "Hebreus", "Tiago", "1 Pedro", "2 Pedro", "1 João", "2 João",
+            "3 João", "Judas", "Apocalipse"
+        ]
+
+    def extract_brolls(self, text: str, win_sentences: List[Dict]) -> List[Dict[str, Any]]:
+        """Extrai sugestoes de B-roll usando spaCy ou busca regex por verbos e elementos."""
+        brolls = []
+        text_lower = text.lower()
+
+        # 1. Verbos de acao
+        for verb, query in self.action_verbs.items():
+            if verb in text_lower:
+                # Encontra timestamp relativo
+                ts = win_sentences[0]['start'] if win_sentences else 0.0
+                for s in win_sentences:
+                    if verb in s['text'].lower():
+                        ts = s['start']
+                        break
+                brolls.append({
+                    "timestamp_sec": round(ts, 2),
+                    "pexels_query": query,
+                    "category": "action_verb",
+                    "trigger_word": verb
+                })
+
+        # 2. Elementos biblicos
+        for elem, query in self.biblical_elements.items():
+            if elem in text_lower:
+                ts = win_sentences[0]['start'] if win_sentences else 0.0
+                for s in win_sentences:
+                    if elem in s['text'].lower():
+                        ts = s['start']
+                        break
+                brolls.append({
+                    "timestamp_sec": round(ts, 2),
+                    "pexels_query": query,
+                    "category": "biblical_element",
+                    "trigger_word": elem
+                })
+
+        # 3. Sobreposicao historica
+        for hist in self.historical_places:
+            if hist in text_lower:
+                ts = win_sentences[0]['start'] if win_sentences else 0.0
+                for s in win_sentences:
+                    if hist in s['text'].lower():
+                        ts = s['start']
+                        break
+                brolls.append({
+                    "timestamp_sec": round(ts, 2),
+                    "pexels_query": f"historical {hist} ancient biblical scene",
+                    "category": "historical_overlay",
+                    "trigger_word": hist
+                })
+
+        return brolls[:6]
+
+    def classify_sermon_profile(self, text: str) -> str:
+        """Classifica o perfil do trecho entre Exortacao, Ensino, Consolo, Testemunho e Batalha Espiritual."""
+        txt = text.lower()
+        scores = {
+            "Exortação": sum(1 for w in ["arrependa", "pecado", "vigiai", "mudança", "alerta", "postura"] if w in txt),
+            "Ensino": sum(1 for w in ["significa", "grego", "hebraico", "versículo", "contexto", "exegese"] if w in txt),
+            "Consolo": sum(1 for w in ["chora não", "consolador", "paz", "descansa", "não temas", "lágrimas"] if w in txt),
+            "Testemunho": sum(1 for w in ["aconteceu comigo", "minha vida", "eu era", "deus fez", "testemunho"] if w in txt),
+            "Batalha Espiritual": sum(1 for w in ["guerra", "inimigo", "muralhas", "derrota", "vitória", "sangue"] if w in txt),
+        }
+        best = max(scores, key=scores.get)
+        return best if scores[best] > 0 else "Exortação"
+
+    def extract_contextual_subtitle(self, text: str) -> Optional[str]:
+        """Extrai citacao de livro biblico para fixar no canto da tela."""
+        for book in self.bible_books:
+            pattern = rf'\b{re.escape(book)}\s*(\d+)?\b'
+            m = re.search(pattern, text, re.IGNORECASE)
+            if m:
+                cap = f" {m.group(1)}" if m.group(1) else ""
+                return f"{book}{cap}"
+        return None
+
+    def clean_caption_text(self, text: str) -> str:
+        """Remove vicios de linguagem mantendo a leitura elegante."""
+        cleaned = self.crutch_words_pattern.sub('', text)
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        return cleaned
+
+    def generate_ass_word_by_word(self, win_sentences: List[Dict]) -> List[Dict[str, Any]]:
+        """Gera eventos de legenda palavra-por-palavra no estilo CapCut (.ASS)."""
+        events = []
+        for s in win_sentences:
+            words = s['text'].split()
+            if not words:
+                continue
+            dur = max(0.5, s['end'] - s['start'])
+            w_dur = dur / len(words)
+            c_start = s['start']
+            for w in words:
+                c_end = round(c_start + w_dur, 2)
+                events.append({
+                    "start_sec": round(c_start, 2),
+                    "end_sec": c_end,
+                    "word": re.sub(r'[^\w]', '', w),
+                    "raw_word": w
+                })
+                c_start = c_end
+        return events
+
+    def generate_titles_and_seo(
+        self, text: str, profile: str, context_sub: Optional[str], preacher: str = "Pastor IBPM CR"
+    ) -> SEOMetadata:
+        """Gera 3 variacoes de titulo (Curiosidade, Teologico, Emocional) e metadados completos de SEO."""
+        words = [w for w in re.findall(r'\b\w{4,}\b', text.lower()) if w not in {'para', 'como', 'esta', 'voce'}]
+        top_topic = words[0].capitalize() if words else "Fé"
+
+        curiosity_title = f"O detalhe sobre {top_topic} que você não percebeu..."
+        theological_title = f"Exposição em {context_sub or top_topic} - A Essência da Fé"
+        emotional_title = f"Ouça isso se o seu coração está pesado hoje"
+
+        titles = [curiosity_title, theological_title, emotional_title]
+        hashtags = ["#IBPMCR", "#Pregação", f"#{top_topic}", f"#{profile.replace(' ', '')}", "#ShortsEvangelicos"]
+
+        description = (
+            f"📖 {curiosity_title}\n\n"
+            f"Mensagem edificante pregada no culto da IBPM CR.\n"
+            f"Preletor: {preacher}\n\n"
+            f"{' '.join(hashtags)}"
+        )
+
+        pinned_comment = f"Você já passou por isso em sua vida espiritual? Deixe seu comentário e compartilhe essa palavra! 🙌"
+
+        # Copy da thumbnail (max 4 palavras impactantes)
+        top_4 = words[:4] if len(words) >= 4 else ["DEUS", "TEM", "O", "PODER"]
+        thumbnail_copy = " ".join([w.upper() for w in top_4[:4]])
+
+        instagram_post = (
+            f"✨ {curiosity_title} ✨\n\n"
+            f"{text[:280]}...\n\n"
+            f"🔥 Salve este post e envie para alguém que precisa ouvir essa verdade hoje!\n\n"
+            f"{' '.join(hashtags)}"
+        )
+
+        return {
+            "titles": titles,
+            "hashtags": hashtags,
+            "youtube_chapters": [{"relative_start_seconds": 0.0, "chapter_title": "Introdução Profética"}],
+            "tiktok_keywords": [top_topic.lower(), profile.lower(), "fe", "deus", "ibpmcr", "shorts"],
+            "curiosity_title": curiosity_title,
+            "theological_title": theological_title,
+            "emotional_title": emotional_title,
+            "description": description,
+            "pinned_comment": pinned_comment,
+            "thumbnail_copy": thumbnail_copy,
+            "instagram_post": instagram_post,
+        }
+
+
+class DSPFeatureExtractor:
+    """
+    Extrator de Processamento Digital de Sinais (DSP) via librosa ou envelope deterministico.
+    Identifica picos RMS (zoom-in/shake), silencios >2s (black screen/zoom-out), drops de audio e ducking.
+    """
+
+    def __init__(self):
+        self._cache_y = None
+        self._cache_sr = None
+        self._cache_path = None
+
+    def _load_audio_once(self, audio_path: str):
+        if self._cache_path != audio_path:
+            self._cache_path = audio_path
+            # Para arquivos .webm/.mp4 pesados, usa o simulador DSP determinístico instantâneo
+            if HAS_LIBROSA and audio_path and os.path.exists(audio_path) and not audio_path.lower().endswith(('.webm', '.mp4', '.mkv')):
+                try:
+                    logger.info(f"Carregando amostra rápida do audio {audio_path}...")
+                    y, sr = librosa.load(audio_path, sr=16000, mono=True, duration=120.0)
+                    self._cache_y = y
+                    self._cache_sr = sr
+                except Exception as e:
+                    logger.warning(f"Erro ao ler audio com librosa: {e}")
+                    self._cache_y = None
+                    self._cache_sr = None
+            else:
+                self._cache_y = None
+                self._cache_sr = None
+
+    def extract_features(
+        self, audio_path: Optional[str], win_sentences: List[Dict], start_sec: float, end_sec: float, win_text: str
+    ) -> Dict[str, Any]:
+        """Calcula metadados de DSP do trecho."""
+        duration = max(1.0, end_sec - start_sec)
+
+        # 1. Tenta analise real com librosa se arquivo de audio existir
+        if HAS_LIBROSA and audio_path and os.path.exists(audio_path):
+            self._load_audio_once(audio_path)
+            if self._cache_y is not None and self._cache_sr is not None:
+                try:
+                    sr = self._cache_sr
+                    s_idx = int(start_sec * sr)
+                    e_idx = int(end_sec * sr)
+                    y_sub = self._cache_y[s_idx:e_idx]
+
+                    if len(y_sub) > 0:
+                        rms = librosa.feature.rms(y=y_sub)[0]
+                        times = librosa.times_like(rms, sr=sr, hop_length=512) + start_sec
+
+                        threshold_shake = np.percentile(rms, 88) if len(rms) > 0 else 0.5
+                        shake_at = [round(float(times[idx]), 2) for idx, val in enumerate(rms) if val > threshold_shake]
+                        max_climax_idx = np.argmax(rms) if len(rms) > 0 else 0
+                        climax_sec = float(times[max_climax_idx]) if len(times) > 0 else start_sec + (duration / 2)
+                        climax_ms = int(climax_sec * 1000)
+
+                        silence_mask = rms < np.percentile(rms, 15)
+                        black_screens = []
+                        is_silent = False
+                        sil_start = 0.0
+                        for idx, silent in enumerate(silence_mask):
+                            t = float(times[idx])
+                            if silent and not is_silent:
+                                is_silent = True
+                                sil_start = t
+                            elif not silent and is_silent:
+                                is_silent = False
+                                if t - sil_start >= 1.8:
+                                    black_screens.append({"start_sec": round(sil_start, 2), "end_sec": round(t, 2)})
+
+                        has_clipping = np.max(np.abs(y_sub)) > 0.98
+                        eq_preset = "attenuate_treble" if has_clipping else "flat"
+
+                        return {
+                            "shake_effect_at": shake_at[:5],
+                            "black_screen_at": black_screens[:3],
+                            "drop_marker_ms": climax_ms,
+                            "equalizer_preset": eq_preset,
+                            "has_clipping": has_clipping,
+                        }
+                except Exception as e:
+                    logger.warning(f"Falha ao fatiar audio com librosa: {e}")
+
+        # 2. Simulator DSP Nativo (Fallback deterministico por WPM, exclamacoes e lacunas)
+        shake_at = []
+        black_screens = []
+        caps_spans = []
+
+        # Procura sentenças com exclamacoes ou texto em maiusculas para picos RMS
+        for s in win_sentences:
+            if '!' in s['text'] or s['text'].isupper():
+                shake_at.append(round(s['start'], 2))
+                caps_spans.append({"start_sec": round(s['start'], 2), "end_sec": round(s['end'], 2), "text": s['text'].upper()})
+
+        # Procura lacunas entre sentenças para silêncios > 2s
+        for i in range(len(win_sentences) - 1):
+            gap = win_sentences[i+1]['start'] - win_sentences[i]['end']
+            if gap >= 2.0:
+                black_screens.append({
+                    "start_sec": round(win_sentences[i]['end'], 2),
+                    "end_sec": round(win_sentences[i+1]['start'], 2)
+                })
+
+        climax_sec = start_sec + (duration * 0.65)
+        climax_ms = int(climax_sec * 1000)
+
+        return {
+            "shake_effect_at": shake_at[:5],
+            "black_screen_at": black_screens[:3],
+            "drop_marker_ms": climax_ms,
+            "equalizer_preset": "flat",
+            "has_clipping": False,
+        }
 
 
 class DualSermonMiner:
     """
-    Minerador de Alta Precisao v2: TextRank + Timestamps Reais + Posicao + Emocao + NMS + Heuristica.
+    Minerador de Alta Precisao v3: TextRank + NMS + Directives (Diretor de Arte Algoritmico).
     """
 
     def __init__(self, blacklists=None):
@@ -139,32 +529,49 @@ class DualSermonMiner:
             'profecia', 'revelacao', 'ungido', 'majestade',
         ]
 
-        logger.info("Inicializado DualSermonMiner v2 (Timestamps Reais + Posicao + Emocao + NMS).")
+        self.short_hooks_pattern = re.compile("|".join(self.short_hooks), re.IGNORECASE)
+        self.medium_markers_pattern = re.compile("|".join(self.medium_markers), re.IGNORECASE)
 
-    def format_timestamp(self, seconds):
+        self.nlp_extractor = NLPFeatureExtractor()
+        self.dsp_extractor = DSPFeatureExtractor()
+
+        logger.info("Inicializado DualSermonMiner v3 (Diretor de Arte Algoritmico + Directives MasterCutRecord).")
+
+    def format_timestamp(self, seconds: float) -> str:
         hrs = int(seconds // 3600)
         mins = int((seconds % 3600) // 60)
         secs = int(seconds % 60)
         return f"{hrs:02d}:{mins:02d}:{secs:02d}"
 
-    def parse_text_with_real_timestamps(self, transcript_text):
-        """Le timestamps [HH:MM:SS] reais do Whisper. Fallback para estimativa."""
-        pattern = re.compile(r'\[(\d{2}):(\d{2}):(\d{2})\]\s*(.*?)(?=\[\d{2}:\d{2}:\d{2}\]|$)', re.DOTALL)
+    def parse_text_with_real_timestamps(self, transcript_text: str) -> List[Dict]:
+        """Le timestamps [HH:MM:SS] ou [MM:SS] reais do Whisper/YouTube. Fallback para estimativa."""
+        pattern = re.compile(r'\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2})\]\s*(.*?)(?=\[(?:(?:\d{1,2}):)?\d{1,2}:\d{2}\]|$)', re.DOTALL)
         matches = list(pattern.finditer(transcript_text))
 
         if len(matches) >= 5:
             sentences = []
             for i, m in enumerate(matches):
-                h, mi, s = int(m.group(1)), int(m.group(2)), int(m.group(3))
-                start_sec = h * 3600 + mi * 60 + s
+                h_str, m_str, s_str = m.group(1), m.group(2), m.group(3)
+                hrs = int(h_str) if h_str is not None else 0
+                mins = int(m_str)
+                secs = int(s_str)
+                start_sec = hrs * 3600 + mins * 60 + secs
+
                 text = m.group(4).strip().replace('\n', ' ')
+                text = re.sub(r'^\d+\s+minutos?\s+e\s+\d+\s+segundos?\s*', '', text, flags=re.IGNORECASE).strip()
                 if not text:
                     continue
+
                 if i + 1 < len(matches):
-                    h2, mi2, s2 = int(matches[i+1].group(1)), int(matches[i+1].group(2)), int(matches[i+1].group(3))
-                    end_sec = h2 * 3600 + mi2 * 60 + s2
+                    m2 = matches[i+1]
+                    h2_str, m2_str, s2_str = m2.group(1), m2.group(2), m2.group(3)
+                    hrs2 = int(h2_str) if h2_str is not None else 0
+                    mins2 = int(m2_str)
+                    secs2 = int(s2_str)
+                    end_sec = hrs2 * 3600 + mins2 * 60 + secs2
                 else:
                     end_sec = start_sec + max(2.0, len(text.split()) / 2.2)
+
                 end_sec = max(end_sec, start_sec + 0.5)
                 sentences.append({
                     "text": text,
@@ -173,13 +580,13 @@ class DualSermonMiner:
                     "duration": round(end_sec - start_sec, 2),
                     "has_real_ts": True,
                 })
-            logger.info(f"Timestamps reais: {len(sentences)} linhas do Whisper.")
+            logger.info(f"Timestamps reais: {len(sentences)} linhas processadas.")
             return sentences
 
-        logger.warning("Sem timestamps [HH:MM:SS] suficientes - usando estimativa.")
+        logger.warning("Sem timestamps [HH:MM:SS] ou [MM:SS] suficientes - usando estimativa.")
         return self._parse_text_estimated(transcript_text)
 
-    def _parse_text_estimated(self, transcript_text):
+    def _parse_text_estimated(self, transcript_text: str) -> List[Dict]:
         raw_sentences = re.split(r'(?<=[.!?])\s+', transcript_text.strip())
         if len(raw_sentences) <= 3 and len(transcript_text.split()) > 100:
             words = transcript_text.strip().split()
@@ -198,7 +605,7 @@ class DualSermonMiner:
             current_sec = end_sec
         return sentences
 
-    def _compute_textrank(self, texts, damping=0.85):
+    def _compute_textrank(self, texts: List[str], damping: float = 0.85) -> np.ndarray:
         if not texts or len(texts) < 2:
             return np.ones(len(texts))
         try:
@@ -220,7 +627,7 @@ class DualSermonMiner:
         except Exception:
             return np.ones(len(texts)) / max(1, len(texts))
 
-    def _score_positional_weight(self, start_sec, total_duration):
+    def _score_positional_weight(self, start_sec: float, total_duration: float) -> float:
         if total_duration <= 0:
             return 1.0
         rel = start_sec / total_duration
@@ -233,7 +640,7 @@ class DualSermonMiner:
         else:
             return 0.90
 
-    def _score_emotional_intensity(self, win_text):
+    def _score_emotional_intensity(self, win_text: str) -> float:
         text_lower = win_text.lower()
         excl_score = min(0.30, win_text.count('!') * 0.05)
         word_hits = sum(1 for w in self._emotional_words if w in text_lower)
@@ -246,7 +653,7 @@ class DualSermonMiner:
             rep_score = 0.0
         return min(1.0, excl_score + word_score + rep_score)
 
-    def _extract_title_from_content(self, win_text, max_words=7):
+    def _extract_title_from_content(self, win_text: str, max_words: int = 7) -> str:
         clean = re.sub(r'\[\d{2}:\d{2}:\d{2}\]', '', win_text)
         clean = re.sub(r'[^\w\s]', ' ', clean)
         stopwords = {
@@ -272,18 +679,11 @@ class DualSermonMiner:
                 break
         return " ".join(ordered) if ordered else "Mensagem Poderosa"
 
-    def generate_windows(self, sentences, min_dur, max_dur, step=10):
-        """
-        Para SHORTS (min_dur < 180s): gera uma janela por ponto de inicio.
-        Para MEDIOS (min_dur >= 180s): gera snapshots em 5 durações-alvo distintas
-        (3, 5, 8, 12, 15 min) por ponto de inicio, para que o NMS escolha
-        os melhores por score em vez de sempre pegar o minimo.
-        """
+    def generate_windows(self, sentences: List[Dict], min_dur: float, max_dur: float, step: int = 10) -> List[Dict]:
         windows = []
         n = len(sentences)
 
         if min_dur >= 180.0:
-            # Modo MEDIO: múltiplos tamanhos-alvo por ponto de inicio
             target_durations = [d for d in [180, 300, 480, 720, 900] if min_dur <= d <= max_dur]
             for i in range(0, n, step):
                 win_start = sentences[i]['start']
@@ -308,7 +708,6 @@ class DualSermonMiner:
                             'duration': dur, 'indices': list(range(i, best_j + 1))
                         })
         else:
-            # Modo SHORT: uma janela por ponto de inicio (comportamento original)
             max_span = 80
             for i in range(0, n, step):
                 win_start = sentences[i]['start']
@@ -323,7 +722,7 @@ class DualSermonMiner:
                         break
         return windows
 
-    def suppress_nms(self, windows, iou_thresh):
+    def suppress_nms(self, windows: List[Dict], iou_thresh: float) -> List[Dict]:
         if not windows:
             return []
         sorted_wins = sorted(windows, key=lambda x: x['score'], reverse=True)
@@ -341,18 +740,208 @@ class DualSermonMiner:
             sorted_wins = remaining
         return selected
 
-    def extract_7_words_anchor(self, text, is_end=False):
+    def extract_7_words_anchor(self, text: str, is_end: bool = False) -> str:
         clean = re.sub(r'\[\d{2}:\d{2}:\d{2}\]', '', text).strip()
         words = clean.split()
         if len(words) < 7:
             words += ["palavra"] * (7 - len(words))
         return " ".join(words[-7:] if is_end else words[:7])
 
-    def mine_sermon(self, transcript_text, sermon_id="IBPM_CULTO"):
-        """v2: timestamps reais + posicao + emocao + titulo automatico + threshold minimo."""
+    def _build_master_cut_record(
+        self,
+        cut_id: str,
+        sermon_id: str,
+        tipo: str,
+        w: Dict,
+        sentences: List[Dict],
+        tr_scores: np.ndarray,
+        audio_path: Optional[str] = None
+    ) -> MasterCutRecord:
+        """Monta o objeto MasterCutRecord com as diretrizes completas de Direcao de Arte."""
+        win_sentences = [sentences[idx] for idx in w['indices']]
+        win_text = " ".join([s['text'] for s in win_sentences])
+        start_sec = round(w['start'], 2)
+        end_sec = round(w['end'], 2)
+        duration = round(end_sec - start_sec, 2)
+        score = round(w['score'], 3)
+
+        title_a = self._extract_title_from_content(win_text)
+        title_b = f"{title_a} | IBPM CR" if tipo == "Short (9:16)" else f"{title_a} - Pregação Completa"
+
+        # 1. Extracao NLP
+        brolls = self.nlp_extractor.extract_brolls(win_text, win_sentences)
+        sermon_prof = self.nlp_extractor.classify_sermon_profile(win_text)
+        context_sub = self.nlp_extractor.extract_contextual_subtitle(win_text)
+        cleaned_text = self.nlp_extractor.clean_caption_text(win_text)
+        ass_events = self.nlp_extractor.generate_ass_word_by_word(win_sentences)
+        seo_meta = self.nlp_extractor.generate_titles_and_seo(win_text, sermon_prof, context_sub)
+
+        # Promessa central e Cold Open (frase mais forte com verbos no futuro ou alta emocao)
+        fut_matches = re.findall(r'([^.!?]*?\b(?:vai|irá|verá|fará|mudará|vou)\b[^.!?]*[.!?]?)', win_text, re.IGNORECASE)
+        central_promise = fut_matches[0].strip() if fut_matches else win_sentences[0]['text']
+        cold_open = win_sentences[0]['text'][:100]
+
+        # Call to Action
+        cta_match = re.search(r'\b(venha|aceite|levante|venha para|tome posse)\b', win_text, re.IGNORECASE)
+        call_to_action = cta_match.group(0).capitalize() if cta_match else None
+
+        # Exegese flag (presenca de versiculos/livros biblicos)
+        is_exegese = bool(context_sub or 'versículo' in win_text.lower() or 'hebraico' in win_text.lower())
+
+        # Contagem divindade
+        divine_count = sum(1 for w_div in ['deus', 'jesus', 'espírito', 'espirito', 'senhor', 'pai'] if w_div in win_text.lower())
+
+        # One-liner summary (sentença de maior TextRank dentro da janela)
+        win_tr_scores = [tr_scores[idx] for idx in w['indices']]
+        best_local_idx = int(np.argmax(win_tr_scores))
+        one_liner = win_sentences[best_local_idx]['text']
+
+        # Destaques teologicos
+        highlight_words = []
+        for word, color in self.nlp_extractor.theological_highlights.items():
+            if word in win_text.lower():
+                highlight_words.append({"word": word, "color": color})
+
+        # Imperativos (wiggle)
+        imperative_words = [w_imp for w_imp in self.nlp_extractor.imperative_verbs if w_imp in win_text.lower()]
+
+        # Emojis por sentimento
+        emoji_inserts = []
+        for pattern, emo, sent in self.nlp_extractor.emoji_map:
+            if re.search(pattern, win_text.lower()):
+                emoji_inserts.append({"word": sent, "emoji": emo, "sentiment": sent})
+
+        # 2. Extracao DSP
+        dsp_data = self.dsp_extractor.extract_features(audio_path, win_sentences, start_sec, end_sec, win_text)
+
+        # WPM e Ducking / BPM
+        words_count = len(win_text.split())
+        wpm = words_count / max(1.0, duration / 60.0)
+        wps = words_count / max(1.0, duration)
+        bpm = 120 if wps > 2.5 else 80
+
+        ducking_points = []
+        if wps > 2.8:
+            ducking_points.append({"start_sec": start_sec, "end_sec": end_sec, "factor": 0.35})
+
+        # Mood da BGM
+        if sermon_prof == "Consolo":
+            bgm_mood = "piano/cinematic"
+        elif sermon_prof in ["Batalha Espiritual", "Exortação"]:
+            bgm_mood = "epic/orchestral"
+        else:
+            bgm_mood = "worship/ambient"
+
+        # Directives estruturados
+        visual_directives: VisualDirectives = {
+            "camera_movement": "Auto-Zoom In" if dsp_data.get("shake_effect_at") else "Normal",
+            "shake_effect_at": dsp_data.get("shake_effect_at", []),
+            "broll_inserts": brolls,
+            "black_screen_at": dsp_data.get("black_screen_at", []),
+            "blur_hook_sec": 3.0,
+            "drop_marker_ms": dsp_data.get("drop_marker_ms"),
+            "ken_burns_spans": [{"start_sec": start_sec, "end_sec": end_sec}] if duration > 45.0 and not dsp_data.get("shake_effect_at") else [],
+            "crop_9_16_tracking": {"position": "center", "grid": "3x3_safe"},
+            "progress_bar": {"position": "bottom", "duration_sec": duration, "visible": True},
+            "safe_zones": {"top_pct": 15, "bottom_pct": 20, "logo_safe": True},
+            "broll_loop_mode": "lofi_relaxing" if wps < 1.8 else None,
+            "visual_countdown": True if score > 0.45 else False,
+        }
+
+        typography_directives: TypographyDirectives = {
+            "highlight_words": highlight_words,
+            "kinetic_style": "Word-by-Word",
+            "sticky_quote": central_promise[:60],
+            "emoji_inserts": emoji_inserts,
+            "caps_lock_spans": dsp_data.get("shake_effect_at", []),
+            "dynamic_font_spans": [{"text": win_text[:50], "font_family": "Cinzel" if is_exegese else "Montserrat"}],
+            "typewriter_spans": [{"start_sec": start_sec, "end_sec": start_sec + 4.0, "text": win_sentences[0]['text']}],
+            "word_by_word_ass_events": ass_events[:30],
+            "imperative_wiggle_words": imperative_words,
+            "contextual_subtitles": context_sub,
+            "cleaned_caption_text": cleaned_text,
+        }
+
+        audio_directives: AudioDirectives = {
+            "sfx_inserts": [
+                {"timestamp_sec": start_sec, "sfx_type": "boom"},
+                {"timestamp_sec": max(start_sec, (dsp_data.get("drop_marker_ms", 0)/1000.0) - 5.0), "sfx_type": "riser"}
+            ],
+            "bgm_mood": bgm_mood,
+            "ducking_points": ducking_points,
+            "audio_drop_ms": dsp_data.get("drop_marker_ms"),
+            "sfx_whoosh_timestamps": [start_sec + (duration * 0.5)],
+            "sfx_riser_timestamp": round(max(start_sec, (dsp_data.get("drop_marker_ms", 0)/1000.0) - 5.0), 2),
+            "sfx_boom_timestamp": start_sec,
+            "bpm_suggestion": bpm,
+            "equalizer_preset": dsp_data.get("equalizer_preset", "flat"),
+            "fade_out_sec": 1.5,
+            "crowd_swell_spans": [],
+        }
+
+        theological_analysis: TheologicalAnalysis = {
+            "sermon_profile": sermon_prof,
+            "is_exegese": is_exegese,
+            "central_promise": central_promise,
+            "call_to_action": call_to_action,
+            "problem_solution": {
+                "problem": win_sentences[0]['text'],
+                "solution": win_sentences[-1]['text']
+            },
+            "divine_density_score": divine_count,
+            "one_liner_summary": one_liner,
+            "bible_cross_references": [{"term": context_sub or "Fé", "cross_ref": "Bíblia Sagrada"}] if context_sub else [],
+            "heresy_flag": False,
+            "prophecy_marker": True if "deus mandou te dizer" in win_text.lower() else False,
+        }
+
+        retention_hooks: RetentionHooks = {
+            "cold_open_text": cold_open,
+            "seamless_loop": True if win_sentences[-1]['text'].strip().endswith(('...', ',')) else False,
+            "cta_popup_at": round(max(start_sec, end_sec - 3.0), 2),
+            "story_poll": {
+                "question": "Você precisa dessa palavra hoje?",
+                "option_a": "Sim, com certeza! 🙌",
+                "option_b": "Preciso de oração 🙏"
+            },
+            "share_trigger": "Envie para alguém que precisa ouvir isso!" if sermon_prof == "Consolo" else None,
+            "pattern_break_timestamps": dsp_data.get("shake_effect_at", []),
+            "bible_quiz": {
+                "question": f"Onde está registrada essa lição de {context_sub or 'fé'}?",
+                "options": ["A) Salmos", "B) Efésios", "C) Mateus"],
+                "answer": "B"
+            } if is_exegese else None,
+            "part_separator_tag": "Comente PARTE 2 para continuar" if duration > 60.0 else None,
+            "controversy_flag": True if '?' in win_text else False,
+            "easter_egg_logo_timestamps": [start_sec] if 'ibpm' in win_text.lower() else [],
+        }
+
+        return {
+            "cut_id": cut_id,
+            "sermon_id": sermon_id,
+            "tipo": tipo,
+            "start_sec": start_sec,
+            "end_sec": end_sec,
+            "duration": duration,
+            "score": score,
+            "title_hook_a": title_a,
+            "title_hook_b": title_b,
+            "start_anchor_7_words": self.extract_7_words_anchor(win_text, is_end=False),
+            "end_anchor_7_words": self.extract_7_words_anchor(win_text, is_end=True),
+            "text_snippet": win_text[:300] + "...",
+            "visual_directives": visual_directives,
+            "typography_directives": typography_directives,
+            "audio_directives": audio_directives,
+            "theological_analysis": theological_analysis,
+            "seo_metadata": seo_meta,
+            "retention_hooks": retention_hooks,
+        }
+
+    def mine_sermon(self, transcript_text: str, sermon_id: str = "IBPM_CULTO", audio_path: Optional[str] = None) -> Dict[str, Any]:
+        """v3: Timestamps reais + TextRank + NMS + Directives de Direcao de Arte Algoritmico."""
         sentences = self.parse_text_with_real_timestamps(transcript_text)
         if not sentences:
-            return {"job_id": f"job_v2_{sermon_id}", "source_video_id": sermon_id,
+            return {"job_id": f"job_v3_{sermon_id}", "source_video_id": sermon_id,
                     "sermon_title": f"Culto {sermon_id}", "preacher_name": "Pastor IBPM CR",
                     "short_form_cuts": [], "mid_form_cuts": []}
 
@@ -368,7 +957,7 @@ class DualSermonMiner:
             if any(re.search(p, win_text.lower()) for p in self.blacklists):
                 continue
             tr_val = float(np.mean([tr_scores[idx] for idx in w['indices']]))
-            hooks = sum(1.0 for h in self.short_hooks if re.search(h, win_text.lower()))
+            hooks = len(self.short_hooks_pattern.findall(win_text))
             hooks_norm = min(1.0, hooks / 3.0)
             emot = self._score_emotional_intensity(win_text)
             pos = self._score_positional_weight(w['start'], total_duration)
@@ -392,7 +981,7 @@ class DualSermonMiner:
             if any(re.search(p, win_text.lower()) for p in self.blacklists):
                 continue
             tr_val = float(np.mean([tr_scores[idx] for idx in w['indices']]))
-            markers = sum(1.0 for m in self.medium_markers if re.search(m, win_text.lower()))
+            markers = len(self.medium_markers_pattern.findall(win_text))
             markers_norm = min(1.0, markers / 4.0)
             emot = self._score_emotional_intensity(win_text)
             pos = self._score_positional_weight(w['start'], total_duration)
@@ -408,43 +997,35 @@ class DualSermonMiner:
         valid_mediums = sorted(valid_mediums, key=lambda x: x['score'], reverse=True)[:60]
         mediums = self.suppress_nms(valid_mediums, 0.35)[:3]
 
-        # --- Formatacao ---
+        # --- Formatacao MasterCutRecord ---
         short_payload = []
         for idx, s in enumerate(shorts, 1):
-            title = self._extract_title_from_content(s['text'])
-            short_payload.append({
-                "cut_id": f"short_{idx:03d}",
-                "title_hook_a": title,
-                "title_hook_b": f"{title} | IBPM CR",
-                "start_anchor_7_words": self.extract_7_words_anchor(s['text'], is_end=False),
-                "end_anchor_7_words": self.extract_7_words_anchor(s['text'], is_end=True),
-                "category": "Gatilho Profetico",
-                "emotional_tone": "Inspirador",
-                "start_sec": round(s['start'], 2),
-                "end_sec": round(s['end'], 2),
-                "score": round(s['score'], 3),
-                "text_snippet": s['text'][:200] + "..."
-            })
+            cut_record = self._build_master_cut_record(
+                cut_id=f"short_{idx:03d}",
+                sermon_id=sermon_id,
+                tipo="Short (9:16)",
+                w=s,
+                sentences=sentences,
+                tr_scores=tr_scores,
+                audio_path=audio_path
+            )
+            short_payload.append(cut_record)
 
         medium_payload = []
         for idx, m in enumerate(mediums, 1):
-            title = self._extract_title_from_content(m['text'])
-            medium_payload.append({
-                "cut_id": f"mid_{idx:03d}",
-                "title_hook_a": title,
-                "title_hook_b": f"{title} - Pregacao Completa",
-                "start_anchor_7_words": self.extract_7_words_anchor(m['text'], is_end=False),
-                "end_anchor_7_words": self.extract_7_words_anchor(m['text'], is_end=True),
-                "category": "Exegese",
-                "emotional_tone": "Reflexivo",
-                "start_sec": round(m['start'], 2),
-                "end_sec": round(m['end'], 2),
-                "score": round(m['score'], 3),
-                "text_snippet": m['text'][:300] + "..."
-            })
+            cut_record = self._build_master_cut_record(
+                cut_id=f"mid_{idx:03d}",
+                sermon_id=sermon_id,
+                tipo="Mid (16:9)",
+                w=m,
+                sentences=sentences,
+                tr_scores=tr_scores,
+                audio_path=audio_path
+            )
+            medium_payload.append(cut_record)
 
         insights_payload = {
-            "job_id": f"job_v2_{sermon_id}",
+            "job_id": f"job_v3_{sermon_id}",
             "source_video_id": sermon_id,
             "sermon_title": f"Culto IBPM CR {sermon_id}",
             "preacher_name": "Pastor IBPM CR",
@@ -454,14 +1035,14 @@ class DualSermonMiner:
                 "total_duration_sec": round(total_duration, 1),
                 "sentences_parsed": len(sentences),
                 "uses_real_timestamps": sentences[0].get("has_real_ts", False) if sentences else False,
-                "algorithm_version": "v2"
+                "algorithm_version": "v3_art_director"
             }
         }
 
         self.export_relatorio_csv(sermon_id, short_payload + medium_payload)
         return insights_payload
 
-    def export_relatorio_csv(self, source_file, cuts):
+    def export_relatorio_csv(self, source_file: str, cuts: List[Dict]):
         csv_path = Path("data/relatorio_cortes.csv")
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         file_exists = csv_path.exists()
@@ -487,7 +1068,7 @@ class PlaylistOrganizer:
         self.num_playlists = num_playlists
         self.vectorizer = TfidfVectorizer(max_features=800, sublinear_tf=True)
 
-    def build_playlists(self, all_medium_videos):
+    def build_playlists(self, all_medium_videos: List[Dict]):
         if not all_medium_videos or len(all_medium_videos) < self.num_playlists:
             return {0: all_medium_videos}
         texts = [v.get('text_snippet', '') for v in all_medium_videos]

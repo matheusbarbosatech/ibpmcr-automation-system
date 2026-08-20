@@ -311,7 +311,12 @@ class PipelineMineracaoFase2:
                     continue
 
                 try:
-                    insights = self.miner.mine_sermon(transcript_text=texto, sermon_id=sermon_id)
+                    caminho_audio = mapa_midias.get(sermon_id)
+                    insights = self.miner.mine_sermon(
+                        transcript_text=texto,
+                        sermon_id=sermon_id,
+                        audio_path=str(caminho_audio) if caminho_audio else None
+                    )
 
                     out_json = self.dir_insights / f"{sermon_id}.insights.json"
                     with open(out_json, "w", encoding="utf-8") as f:
