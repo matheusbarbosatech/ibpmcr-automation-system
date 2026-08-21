@@ -64,39 +64,10 @@ class YTDLPClient:
 
         filename_no_ext = str(output_path.with_suffix(""))
 
-        # Estratégia 1: Uso da biblioteca nativa Python yt_dlp
-        if HAS_YT_DLP:
-            ydl_opts = {
-                'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                'outtmpl': f"{filename_no_ext}.%(ext)s",
-                'download_ranges': yt_dlp.utils.download_range_func(None, [(start_m, end_m)]),
-                'force_keyframes_at_cuts': True,
-                'quiet': True,
-                'no_warnings': True,
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android', 'web']
-                    }
-                },
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                }
-            }
+        cookies_file = Path(__file__).resolve().parent.parent.parent / "cookies.txt"
+        cookies_arg = ["--cookies", str(cookies_file)] if cookies_file.exists() else []
 
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([video_url])
-
-                # Localiza o arquivo baixado
-                for ext in [".mp4", ".mkv", ".webm"]:
-                    candidate = Path(f"{filename_no_ext}{ext}")
-                    if candidate.exists() and candidate.stat().st_size > 10000:
-                        logger.info("Download cirúrgico concluído via biblioteca nativa", job_id=job_id, file=str(candidate))
-                        return candidate
-            except Exception as e:
-                logger.warning("Falha na execução nativa do yt_dlp. Tentando fallback via subprocesso.", error=str(e))
-
-        format_str_4k = "315+140/401+140/308+140/400+140/299+140/399+140/137+140/bestvideo[height>=2160]+bestaudio/bestvideo[height>=1440]+bestaudio/bestvideo[height>=1080]+bestaudio/best"
+        format_str_4k = "bestvideo[height<=2160]+bestaudio/bestvideo+bestaudio/best"
         import shutil
         ffmpeg_exe = shutil.which("ffmpeg") or shutil.which("ffmpeg.exe") or settings.FFMPEG_BINARY_PATH
         if ffmpeg_exe and Path(ffmpeg_exe).exists():
@@ -106,26 +77,26 @@ class YTDLPClient:
 
         node_exe = shutil.which("node") or shutil.which("node.exe") or r"C:\Program Files\nodejs\node.exe"
 
-        # Estratégia 2: Fallback via Subprocess CLI do yt-dlp com web_embedded player client
         cmd = [
             sys.executable, "-m", "yt_dlp",
-            "--extractor-args", "youtube:player_client=web_embedded",
+            "--no-progress",
+            "--quiet",
+            "--concurrent-fragments", "8",
             "--js-runtimes", f"node:{node_exe}",
             "--remote-components", "ejs:github",
             "--download-sections", section_str,
             "-f", format_str_4k,
             "--ffmpeg-location", ffmpeg_location_arg,
-            "--force-keyframes-at-cuts",
+            "--merge-output-format", "mp4",
             "--output", f"{filename_no_ext}.%(ext)s",
-            video_url
-        ]
+        ] + cookies_arg + [video_url]
 
         try:
             res = subprocess.run(cmd, capture_output=True, text=True, check=True)
             for ext in [".mp4", ".mkv", ".webm"]:
                 candidate = Path(f"{filename_no_ext}{ext}")
                 if candidate.exists() and candidate.stat().st_size > 10000:
-                    logger.info("Download cirúrgico concluído via subprocess CLI", job_id=job_id, file=str(candidate))
+                    logger.info("Download cirúrgico 4K concluído com sucesso", job_id=job_id, file=str(candidate))
                     return candidate
 
             raise FileNotFoundError(f"Arquivo resultante do download cirúrgico não foi encontrado em {output_path}")
@@ -168,17 +139,19 @@ class YTDLPClient:
 
         node_exe = shutil.which("node") or shutil.which("node.exe") or r"C:\Program Files\nodejs\node.exe"
 
+        cookies_file = Path(__file__).resolve().parent.parent.parent / "cookies.txt"
+        cookies_arg = ["--cookies", str(cookies_file)] if cookies_file.exists() else []
+
         # Seletor universal de MÁXIMA QUALIDADE ABSOLUTA 4K -> 2K -> 1080p60 -> Best
         format_str = "315+140/401+140/308+140/400+140/299+140/399+140/137+140/bestvideo[height>=2160]+bestaudio/bestvideo[height>=1440]+bestaudio/bestvideo[height>=1080]+bestaudio/best"
 
         # Dispara via subprocess CLI (evita fallbacks do módulo Python)
         cmd = [
             sys.executable, "-m", "yt_dlp",
-            "--extractor-args", "youtube:player_client=web_embedded",
+            "--extractor-args", "youtube:player_client=android,web",
             "--js-runtimes", f"node:{node_exe}",
             "--remote-components", "ejs:github",
             "--no-cache-dir",
-            "--rm-cache-dir",
             "-f", format_str,
             "--ffmpeg-location", ffmpeg_location_arg,
             "--merge-output-format", "mp4",
@@ -186,8 +159,7 @@ class YTDLPClient:
             "--force-overwrites",
             "--postprocessor-args", "ffmpeg:-async 1 -vsync cfr",
             "-o", f"{filename_no_ext}.%(ext)s",
-            video_url
-        ]
+        ] + cookies_arg + [video_url]
 
 
 

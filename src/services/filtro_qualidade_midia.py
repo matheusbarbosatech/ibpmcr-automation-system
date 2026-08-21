@@ -83,6 +83,10 @@ class MediaQualityFilter:
             is_approved = False
             motivos.append(f"Taxa de quadros baixa ({fps:.1f} fps < {self.min_fps} fps)")
 
+        if duration > 0 and duration < 300:
+            is_approved = False
+            motivos.append(f"Duração muito curta ({duration}s < 300s / 5 min - vinheta/teste)")
+
         status = "APROVADO" if is_approved else "DESQUALIFICADO"
         motivo_final = "Qualidade HD Aprovada" if is_approved else "; ".join(motivos)
 

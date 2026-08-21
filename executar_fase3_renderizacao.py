@@ -8,6 +8,7 @@ Executa:
 
 import sys
 import os
+import re
 import csv
 import json
 import argparse
@@ -28,6 +29,37 @@ from src.services.cortador_ffmpeg import FastStreamCopyCutter, parse_timestamp_t
 from src.infrastructure.ffmpeg_client import FFmpegClient
 
 logger = get_logger("ExecutarFase3Renderizacao")
+
+DESKTOP_DATASET_ROOT = Path(r"C:\Users\matheus\Desktop\dataset")
+PASTAS_MIDIA_CANDIDATAS = [
+    BASE_DIR / "data" / "videos",
+    DESKTOP_DATASET_ROOT / "2026" / "audios",
+    DESKTOP_DATASET_ROOT / "2025" / "audios",
+    DESKTOP_DATASET_ROOT / "2024" / "audios",
+    DESKTOP_DATASET_ROOT / "2023" / "audios",
+    DESKTOP_DATASET_ROOT / "2022" / "audios",
+    DESKTOP_DATASET_ROOT / "audios",
+    BASE_DIR / "dataset" / "audios",
+    BASE_DIR / "data" / "audios",
+    BASE_DIR / "data" / "fase1_mapeamento" / "audios",
+]
+
+
+def localizar_midia_origem(orig: str) -> Optional[Path]:
+    extensoes = [".mp4", ".webm", ".mkv", ".mp3", ".wav"]
+    sufixos_ignorar = ("_surgical.mp4", "_enhanced.mp4", "_9x16.mp4", "_corte_")
+    for pasta in PASTAS_MIDIA_CANDIDATAS:
+        if not pasta.exists():
+            continue
+        for ext in extensoes:
+            p = pasta / f"{orig}{ext}"
+            if p.is_file() and not any(s in p.name for s in sufixos_ignorar):
+                return p
+        id_yt = orig.split("_")[1] if "_" in orig else orig
+        for arq in pasta.glob("*.*"):
+            if arq.is_file() and not any(s in arq.name for s in sufixos_ignorar) and (orig in arq.name or id_yt in arq.name):
+                return arq
+    return None
 
 
 def gerar_copys_postagem(cortes_info: List[Dict[str, Any]], output_json: Path, output_txt: Path) -> List[Dict[str, Any]]:
@@ -271,11 +303,62 @@ def executar_fase3_renderizacao(
 
     try:
         # 1. Executa corte ultrarrápido Stream Copy (-c copy)
-        if modo in ["stream_copy", "full"]:
+        if modo in ["stream_copy", "fast_stream_copy", "full"]:
+            output_stream_copy.mkdir(parents=True, exist_ok=True)
             cutter = FastStreamCopyCutter()
-            cuts_copy = cutter.cut_from_csv(csv_file, videos_dir, output_stream_copy)
-            for c in cortes_info:
-                painel.registrar_corte(c.get("corte_id", "short"), c.get("sermon_id", "culto"), float(c.get("duracao", 45)), com_capa=False, status="OK")
+            yt_client = None
+
+            for idx, row in enumerate(cortes_info):
+                orig = row.get("sermon_id", row.get("arquivo_origem", ""))
+                c_id = row.get("corte_id") or f"corte_{idx+1:03d}"
+                c_id_clean = "".join(c for c in c_id if c.isalnum() or c in ("_", "-")).strip()
+                ts_in = str(row.get("start_sec", row.get("timestamp_inicio", "0")))
+                dur = float(row.get("duracao", row.get("duracao_segundos", "45")))
+
+                src_file = localizar_midia_origem(orig)
+                start_sec = float(ts_in) if ts_in.replace('.', '', 1).isdigit() else parse_timestamp_to_seconds(ts_in)
+                end_sec = start_sec + dur
+
+                if not src_file:
+                    m_prefix = re.search(r"^\d{3}_([a-zA-Z0-9_-]{11})_", orig)
+                    yt_id = m_prefix.group(1) if m_prefix else None
+                    if not yt_id:
+                        m_any = re.search(r"_([a-zA-Z0-9_-]{11})_", orig)
+                        yt_id = m_any.group(1) if m_any else None
+                    if not yt_id:
+                        yt_id = next((pt for pt in orig.split("_") if len(pt) == 11 and re.match(r'^[a-zA-Z0-9_-]{11}$', pt)), None)
+
+                    if yt_id:
+                        try:
+                            from src.infrastructure.yt_dlp_client import YTDLPClient
+                            if not yt_client:
+                                yt_client = YTDLPClient()
+                            yt_url = f"https://www.youtube.com/watch?v={yt_id}"
+                            target_mp4 = videos_dir / f"{orig}_{c_id_clean}_surgical.mp4"
+                            src_file = yt_client.download_surgical_cut(
+                                video_url=yt_url,
+                                start_sec=start_sec,
+                                end_sec=end_sec,
+                                output_path=target_mp4,
+                                job_id=f"job_surgical_{c_id_clean}"
+                            )
+                        except Exception as err:
+                            logger.error(f"Falha no download cirúrgico para {orig}: {err}")
+
+                if src_file:
+                    out_cut_file = output_stream_copy / f"{src_file.stem}_{c_id_clean}{src_file.suffix}"
+                    try:
+                        import subprocess
+                        ffmpeg_bin = settings.FFMPEG_BINARY_PATH or "ffmpeg"
+                        cut_start = 2.0 if "surgical" in src_file.name else start_sec
+                        cmd = [ffmpeg_bin, "-y", "-ss", str(cut_start), "-i", str(src_file), "-t", str(dur), "-c", "copy", str(out_cut_file)]
+                        subprocess.run(cmd, capture_output=True, check=True)
+                        painel.registrar_corte(c_id_clean, orig, dur, com_capa=False, status="OK")
+                    except Exception as err:
+                        logger.error(f"Erro ao fatiar stream copy: {err}")
+                        painel.registrar_corte(c_id_clean, orig, dur, com_capa=False, status="ERRO")
+                else:
+                    painel.registrar_corte(c_id_clean, orig, dur, com_capa=False, status="ERRO")
 
         # 2. Executa renderização 9:16 Studio Pro Vertical com FFmpeg
         elif modo in ["studio_9x16", "full"]:
@@ -289,14 +372,7 @@ def executar_fase3_renderizacao(
                 ts_in = str(row.get("start_sec", row.get("timestamp_inicio", "00:00:00")))
                 dur = float(row.get("duracao", row.get("duracao_segundos", "45")))
                 
-                src_file = None
-                for ext in [".mp4", ".webm", ".mkv", ".mp3", ".wav"]:
-                    p = videos_dir / f"{orig}{ext}"
-                    if not p.exists():
-                        p = audios_dir / f"{orig}{ext}"
-                    if p.exists():
-                        src_file = p
-                        break
+                src_file = localizar_midia_origem(orig)
 
                 if not src_file:
                     painel.registrar_corte(c_id_clean, orig, dur, com_capa=False, status="ERRO")
@@ -332,40 +408,37 @@ def executar_fase3_renderizacao(
                 ts_in = str(row.get("start_sec", row.get("timestamp_inicio", "0")))
                 dur = float(row.get("duracao", row.get("duracao_segundos", "45")))
 
-                src_file = None
-                for ext in [".mp4", ".webm", ".mkv", ".mp3", ".wav"]:
-                    p = videos_dir / f"{orig}{ext}"
-                    if not p.is_file():
-                        p = audios_dir / f"{orig}{ext}"
-                    if p.is_file():
-                        src_file = p
-                        break
+                src_file = localizar_midia_origem(orig)
+                start_sec = float(ts_in) if ts_in.replace('.', '', 1).isdigit() else parse_timestamp_to_seconds(ts_in)
+                end_sec = start_sec + dur
 
-                # Se a mídia local não existir, realiza o Download Completo em 4K/Qualidade Máxima para data/videos/
-                if not src_file:
+                is_surgical = False
+                # Se a mídia local for apenas áudio ou não existir, realiza o Download Cirúrgico 4K do YouTube para o trecho
+                necessita_video = not src_file or src_file.suffix.lower() in [".webm", ".mp3", ".wav", ".m4a", ".aac"]
+                if necessita_video:
                     parts = orig.split("_")
-                    yt_id = next((pt for pt in parts if len(pt) == 11 and pt.isalnum()), None)
+                    yt_id = next((pt for pt in parts if len(pt) == 11 and re.match(r'^[a-zA-Z0-9_-]{11}$', pt)), None)
+                    if not yt_id:
+                        m_yt = re.search(r"([a-zA-Z0-9_-]{11})", orig)
+                        yt_id = m_yt.group(1) if m_yt else None
+
                     if yt_id:
                         try:
                             from src.infrastructure.yt_dlp_client import YTDLPClient
                             if not yt_client:
                                 yt_client = YTDLPClient()
                             yt_url = f"https://www.youtube.com/watch?v={yt_id}"
-                            target_mp4 = videos_dir / f"{orig}.mp4"
-                            if target_mp4.exists():
-                                try:
-                                    target_mp4.unlink()
-                                except Exception:
-                                    pass
-
-                            src_file = yt_client.download_full_video_best_quality(
+                            target_mp4 = videos_dir / f"{orig}_{c_id_clean}_surgical.mp4"
+                            src_file = yt_client.download_surgical_cut(
                                 video_url=yt_url,
+                                start_sec=start_sec,
+                                end_sec=end_sec,
                                 output_path=target_mp4,
-                                job_id=f"job_dl_full_{c_id_clean}"
+                                job_id=f"job_surgical_{c_id_clean}"
                             )
-
+                            is_surgical = True
                         except Exception as err:
-                            logger.error(f"Falha ao baixar vídeo completo 4K para {orig}: {err}")
+                            logger.error(f"Falha no download cirúrgico 4K para {orig}: {err}")
 
 
 
@@ -375,16 +448,17 @@ def executar_fase3_renderizacao(
 
                 is_vertical = "short" in str(tipo).lower()
                 out_enhanced = output_enhanced_video / f"{orig}_{c_id_clean}_enhanced.mp4"
-                start_sec = float(ts_in) if ts_in.replace('.', '', 1).isdigit() else parse_timestamp_to_seconds(ts_in)
-                end_sec = start_sec + dur
+                
+                render_start_sec = 2.0 if is_surgical else start_sec
+                render_end_sec = (2.0 + dur) if is_surgical else end_sec
                 titulo_csv = row.get("titulo", "Mensagem Edificante")
 
                 try:
                     enhancer.enhance_clip(
                         input_video=src_file,
                         output_video=out_enhanced,
-                        start_sec=start_sec,
-                        end_sec=end_sec,
+                        start_sec=render_start_sec,
+                        end_sec=render_end_sec,
                         titulo=titulo_csv,
                         categoria=tipo,
                         is_vertical=is_vertical,
@@ -450,16 +524,18 @@ executar_fase4 = executar_fase3_renderizacao
 
 def main():
     parser = argparse.ArgumentParser(description="Executar Fase 3 - Renderização e Produção de Cortes IBPM CR")
-    parser.add_argument("--modo", choices=["stream_copy", "studio_9x16", "enhanced_studio", "full"], default="enhanced_studio",
-                        help="Modo de processamento (stream_copy = 0.1s, studio_9x16 = 9:16 vertical, enhanced_studio = Enquadramento Inteligente + DSP, full = todos)")
+    parser.add_argument("--modo", choices=["stream_copy", "fast_stream_copy", "studio_9x16", "enhanced_studio", "full"], default="enhanced_studio",
+                        help="Modo de processamento (stream_copy/fast_stream_copy = 0.1s, studio_9x16 = 9:16 vertical, enhanced_studio = Enquadramento Inteligente + DSP, full = todos)")
     parser.add_argument("--max", type=int, default=50, help="Quantidade máxima de cortes a processar (ex: --max 1 ou --max 5 para testes)")
     parser.add_argument("--filtro", type=str, default=None, help="Filtra corte por ID ou culto (ex: --filtro 001)")
     parser.add_argument("--no-painel", action="store_true", help="Desativa o painel Rich no terminal")
     parser.add_argument("--no-desktop", action="store_true", help="Desativa cópia automática para a Área de Trabalho")
     args = parser.parse_args()
 
+    modo = "stream_copy" if args.modo in ["stream_copy", "fast_stream_copy"] else args.modo
+
     executar_fase3_renderizacao(
-        modo=args.modo,
+        modo=modo,
         max_cortes=args.max,
         export_desktop=not args.no_desktop,
         filtro=args.filtro,

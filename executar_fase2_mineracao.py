@@ -74,7 +74,14 @@ PASTA_REJEITADOS_MEDIOS_JSON = PASTA_FASE2 / "rejeitados" / "medios_16_9" / "jso
 
 PASTA_TEMP_SCRATCH = PASTA_FASE2 / "temp_scratch"
 
+DESKTOP_DATASET_ROOT = Path(r"C:\Users\matheus\Desktop\dataset")
 PASTAS_AUDIO_FALLBACK = [
+    DESKTOP_DATASET_ROOT / "2026" / "audios",
+    DESKTOP_DATASET_ROOT / "2025" / "audios",
+    DESKTOP_DATASET_ROOT / "2024" / "audios",
+    DESKTOP_DATASET_ROOT / "2023" / "audios",
+    DESKTOP_DATASET_ROOT / "2022" / "audios",
+    DESKTOP_DATASET_ROOT / "audios",
     BASE_DIR / "dataset" / "audios",
     BASE_DIR / "data" / "acervo_completo",
     BASE_DIR / "data" / "audios",
@@ -681,8 +688,13 @@ class PipelineMineracaoFase2:
         self.arq_csv = self.pasta_base / "relatorio_cortes.csv"
         self.arq_playlists = self.pasta_base / "playlists_tematicas.json"
 
-        self.dir_audios_candidatos = PASTAS_AUDIO_FALLBACK
-        self.dir_transcricoes_candidatos = [
+        DESKTOP_DATASET = Path(r"C:\Users\matheus\Desktop\dataset")
+        audios_desktop = [DESKTOP_DATASET / ano / "audios" for ano in ["2026", "2025", "2024", "2023", "2022"]] + [DESKTOP_DATASET / "audios"]
+        trans_desktop_json = [DESKTOP_DATASET / ano / "transcriptions" / "json" for ano in ["2026", "2025", "2024", "2023", "2022"]] + [DESKTOP_DATASET / "transcriptions" / "json"]
+        trans_desktop_txt = [DESKTOP_DATASET / ano / "transcriptions" / "txt" for ano in ["2026", "2025", "2024", "2023", "2022"]] + [DESKTOP_DATASET / "transcriptions" / "txt"]
+
+        self.dir_audios_candidatos = audios_desktop + PASTAS_AUDIO_FALLBACK
+        self.dir_transcricoes_candidatos = trans_desktop_json + trans_desktop_txt + [
             BASE_DIR / "dataset" / "transcriptions" / "json",
             BASE_DIR / "dataset" / "transcriptions" / "txt",
             BASE_DIR / "data" / "fase1_mapeamento" / "transcricoes" / "txt",
@@ -706,12 +718,24 @@ class PipelineMineracaoFase2:
             d.mkdir(parents=True, exist_ok=True)
 
     def extrair_yt_id(self, nome_arquivo: str) -> str:
-        match = re.search(r"([a-zA-Z0-9_-]{11})", Path(nome_arquivo).stem)
-        return match.group(1) if match else Path(nome_arquivo).stem
+        stem = Path(nome_arquivo).stem
+        m_prefix = re.search(r"^\d{3}_([a-zA-Z0-9_-]{11})_", stem)
+        if m_prefix:
+            return m_prefix.group(1)
+        m_any = re.search(r"_([a-zA-Z0-9_-]{11})_", stem)
+        if m_any:
+            return m_any.group(1)
+        m_fallback = re.search(r"([a-zA-Z0-9_-]{11})", stem)
+        return m_fallback.group(1) if m_fallback else stem
+
+    def extrair_indice(self, nome_arquivo: str) -> Optional[str]:
+        m = re.match(r"^(\d{3})_", Path(nome_arquivo).name)
+        return m.group(1) if m else None
 
     def mapear_acervo(self) -> Tuple[Dict[str, Path], Dict[str, Path]]:
         mapa_transcricoes_bruto = {}
         mapa_midias_bruto = {}
+        mapa_midias_por_indice = {}
         nomes_originais = {}
 
         for dir_audio in self.dir_audios_candidatos:
@@ -719,9 +743,12 @@ class PipelineMineracaoFase2:
                 for arq in dir_audio.iterdir():
                     if arq.is_file() and arq.suffix.lower() in self.EXTENSOES_MIDIA:
                         yt_id = self.extrair_yt_id(arq.name)
+                        idx = self.extrair_indice(arq.name)
                         if yt_id not in mapa_midias_bruto:
                             mapa_midias_bruto[yt_id] = arq
                             nomes_originais[yt_id] = arq.stem
+                        if idx and idx not in mapa_midias_por_indice:
+                            mapa_midias_por_indice[idx] = arq
 
         formatos_texto = {".txt", ".srt", ".vtt"}
         for dir_trans in self.dir_transcricoes_candidatos:
@@ -730,10 +757,12 @@ class PipelineMineracaoFase2:
                     if arq.is_file():
                         ext = arq.suffix.lower()
                         yt_id = self.extrair_yt_id(arq.name)
-                        if ext in formatos_texto and yt_id not in mapa_transcricoes_bruto:
-                            mapa_transcricoes_bruto[yt_id] = arq
-                        elif ext == ".json" and not arq.name.endswith(".insights.json"):
-                            mapa_transcricoes_bruto[yt_id] = arq
+                        idx = self.extrair_indice(arq.name)
+                        chave = idx if idx else yt_id
+                        if ext in formatos_texto and chave not in mapa_transcricoes_bruto:
+                            mapa_transcricoes_bruto[chave] = (yt_id, idx, arq)
+                        elif ext == ".json" and not arq.name.endswith(".insights.json") and chave not in mapa_transcricoes_bruto:
+                            mapa_transcricoes_bruto[chave] = (yt_id, idx, arq)
 
         desqualificados_ids = set()
         qual_json = BASE_DIR / "data" / "fase1_mapeamento" / "relatorio_qualidade_midias.json"
@@ -749,13 +778,26 @@ class PipelineMineracaoFase2:
 
         mapa_final_transcricoes = {}
         mapa_final_midias = {}
-        for yt_id, arq_trans in mapa_transcricoes_bruto.items():
+        for chave, (yt_id, idx, arq_trans) in mapa_transcricoes_bruto.items():
             if yt_id in desqualificados_ids:
                 continue
-            sermon_id = nomes_originais.get(yt_id, arq_trans.stem)
+
+            arq_midia = mapa_midias_bruto.get(yt_id)
+            if not arq_midia and idx:
+                arq_midia = mapa_midias_por_indice.get(idx)
+
+            sermon_id = arq_midia.stem if arq_midia else arq_trans.stem
             mapa_final_transcricoes[sermon_id] = arq_trans
-            if yt_id in mapa_midias_bruto:
-                mapa_final_midias[sermon_id] = mapa_midias_bruto[yt_id]
+            if arq_midia:
+                mapa_final_midias[sermon_id] = arq_midia
+
+        # Ordenar do culto mais recente (457) para o mais antigo (001)
+        def _chave_ordenacao_reversa(k):
+            m = re.match(r'^(\d+)', k)
+            return int(m.group(1)) if m else -1
+
+        chaves_ordenadas = sorted(mapa_final_transcricoes.keys(), key=_chave_ordenacao_reversa, reverse=True)
+        mapa_final_transcricoes = {k: mapa_final_transcricoes[k] for k in chaves_ordenadas}
 
         return mapa_final_transcricoes, mapa_final_midias
 
@@ -821,8 +863,12 @@ class PipelineMineracaoFase2:
         try:
             for idx, (sermon_id, caminho_arq) in enumerate(mapa_trans.items(), 1):
                 texto, segmentos = self.carregar_transcricao(caminho_arq)
-                if not texto or len(texto) < 50:
-                    painel.registrar_culto(sermon_id, 0, 0, 0.0, status="ERRO")
+                duracao_estimada = 0.0
+                if segmentos and isinstance(segmentos, list):
+                    duracao_estimada = float(segmentos[-1].get("end", 0.0)) if isinstance(segmentos[-1], dict) else 0.0
+
+                if not texto or len(texto) < 200 or (duracao_estimada > 0 and duracao_estimada < 300.0):
+                    painel.registrar_culto(sermon_id, 0, 0, 0.0, status="CURTO")
                     continue
 
                 try:
