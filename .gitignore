@@ -5,8 +5,11 @@
 cookies.txt
 kaggle.json
 data/
+dataset/
 logs/
 *.log
+*.vtt
+rclone.exe
 
 # Python
 __pycache__/

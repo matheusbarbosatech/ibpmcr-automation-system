@@ -488,6 +488,18 @@ class DualSermonMiner:
             r'informes', r'avisos', r'fique a vontade', r'pode sentar',
         ]
 
+        self.worship_prayer_patterns = [
+            r'cantando', r'vamos cantar', r'canta igreja', r'louvor', r'hino', r'c[aa]ntico',
+            r'bateria', r'viol[aa]o', r'te adoramos', r'te exaltamos', r'reinas para sempre',
+            r'bendito seja', r'santo santo', r'maravilhoso [ee]s', r'louve ao senhor',
+            r'louvando a deus', r'ministra[cc][aa]o de louvor', r'equipe de louvor',
+            r'curve a sua cabec?a', r'feche os seus olhos', r'nesta hora de ora[cc][aa]o',
+            r'coloque a m[aa]o no cora[cc][aa]o', r'oramos em nome de jesus',
+            r'senhor meu deus e meu pai', r'te pedimos nesta', r'orando pelo irm[aa]o',
+            r'vamos orar', r'em nome de jesus amen', r'ora[cc][aa]o da familia',
+        ]
+        self.worship_prayer_regex = re.compile("|".join(self.worship_prayer_patterns), re.IGNORECASE)
+
         self.short_hooks = [
             r'preste aten[cc][aa]o', r'olhe para mim', r'me olha', r'escuta isso',
             r'para um momento', r'isso [ee] importante', r'anota isso',
@@ -536,6 +548,30 @@ class DualSermonMiner:
         self.dsp_extractor = DSPFeatureExtractor()
 
         logger.info("Inicializado DualSermonMiner v3 (Diretor de Arte Algoritmico + Directives MasterCutRecord).")
+
+    def is_worship_or_prayer(self, text: str) -> bool:
+        """Verifica se o trecho é louvor/oração/cântico baseado em densidade de padrões."""
+        if not text:
+            return False
+        matches = self.worship_prayer_regex.findall(text)
+        # Se houver 2 ou mais marcas de louvor/oração no trecho, classifica como tal
+        return len(matches) >= 2
+
+    def is_syntactically_suspended(self, text: str) -> bool:
+        """Verifica se a última frase do trecho termina suspensa (preposição, conectivo, artigo)."""
+        clean = text.strip()
+        if not clean:
+            return True
+        words = clean.split()
+        if not words:
+            return True
+        last_word = re.sub(r'[^\w]', '', words[-1].lower())
+        bad_tails = {
+            "de", "da", "do", "dos", "das", "em", "na", "no", "nos", "nas",
+            "para", "pra", "com", "por", "e", "ou", "mas", "porque", "que",
+            "se", "quando", "entao", "ne", "sabe", "ham", "a", "o", "um", "uma"
+        }
+        return last_word in bad_tails
 
     def format_timestamp(self, seconds: float) -> str:
         hrs = int(seconds // 3600)
@@ -928,7 +964,7 @@ class DualSermonMiner:
             "title_hook_b": title_b,
             "start_anchor_7_words": self.extract_7_words_anchor(win_text, is_end=False),
             "end_anchor_7_words": self.extract_7_words_anchor(win_text, is_end=True),
-            "text_snippet": win_text[:300] + "...",
+            "text_snippet": win_text,
             "visual_directives": visual_directives,
             "typography_directives": typography_directives,
             "audio_directives": audio_directives,
@@ -956,6 +992,11 @@ class DualSermonMiner:
             win_text = " ".join([sentences[idx]['text'] for idx in w['indices']])
             if any(re.search(p, win_text.lower()) for p in self.blacklists):
                 continue
+            if self.is_worship_or_prayer(win_text):
+                continue
+            if self.is_syntactically_suspended(win_text):
+                continue
+
             tr_val = float(np.mean([tr_scores[idx] for idx in w['indices']]))
             hooks = len(self.short_hooks_pattern.findall(win_text))
             hooks_norm = min(1.0, hooks / 3.0)
@@ -980,6 +1021,11 @@ class DualSermonMiner:
             win_text = " ".join([sentences[idx]['text'] for idx in w['indices']])
             if any(re.search(p, win_text.lower()) for p in self.blacklists):
                 continue
+            if self.is_worship_or_prayer(win_text):
+                continue
+            if self.is_syntactically_suspended(win_text):
+                continue
+
             tr_val = float(np.mean([tr_scores[idx] for idx in w['indices']]))
             markers = len(self.medium_markers_pattern.findall(win_text))
             markers_norm = min(1.0, markers / 4.0)

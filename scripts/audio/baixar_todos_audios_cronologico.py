@@ -104,55 +104,117 @@ def main():
         print("🎉 Todos os 457 áudios já foram baixados e estão na pasta!")
         return
 
-    # Opções do yt-dlp otimizadas para qualidade e velocidade
+    # Opções do yt-dlp otimizadas para resiliência e evitar travamentos
     ydl_opts_base = {
         'format': 'bestaudio/best',
         'ignoreerrors': True,
         'retries': 10,
         'fragment_retries': 10,
+        'socket_timeout': 30,
         'concurrent_fragment_downloads': 5,
         'quiet': False,
         'no_warnings': True,
+        'js_runtimes': {'node': {}},
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web']
+                'player_client': ['android', 'ios', 'mweb', 'web']
             }
         }
     }
 
     if COOKIES_FILE.exists():
-        print(f"🍪 Usando arquivo de cookies: {COOKIES_FILE}")
+        print(f"🍪 Usando arquivo de cookies: {COOKIES_FILE.name}")
         ydl_opts_base['cookiefile'] = str(COOKIES_FILE)
+    else:
+        # Tentar detectar cookies de navegadores sem travar no DPAPI
+        navegadores = ['firefox', 'chrome', 'edge', 'brave', 'opera']
+        browser_encontrado = None
+        for nav in navegadores:
+            try:
+                test_opts = {'quiet': True, 'cookiesfrombrowser': (nav,), 'socket_timeout': 10}
+                with yt_dlp.YoutubeDL(test_opts) as ydl:
+                    ydl.extract_info("https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=False)
+                browser_encontrado = nav
+                print(f"🍪 Cookies do navegador '{nav}' ativados!")
+                ydl_opts_base['cookiesfrombrowser'] = (nav,)
+                break
+            except Exception:
+                continue
 
-    sucessos = 0
-    erros = 0
+        if not browser_encontrado:
+            print("ℹ️ DICA: Se o YouTube solicitar autenticação (bot detection):")
+            print("   Exporte os cookies do seu navegador (usando a extensão 'Get cookies.txt LOCALLY')")
+            print(f"   e salve como 'cookies.txt' na raiz do projeto ({COOKIES_FILE.name}).\n")
 
-    for i, (idx, vid_id, titulo, nome_base) in enumerate(pendentes, start=1):
-        print(f"[{i}/{len(pendentes)}] 📥 [{idx:03d}/{total_videos}] Baixando: {titulo} (ID: {vid_id})...")
-        
-        caminho_saida = PASTA_AUDIOS / f"{nome_base}.%(ext)s"
-        ydl_opts = dict(ydl_opts_base)
-        ydl_opts['outtmpl'] = str(caminho_saida)
+    # Loop de execução até que TODOS os vídeos estejam baixados
+    rodada = 1
+    while True:
+        # Mapear arquivos locais atualizados
+        arquivos_locais = list(PASTA_AUDIOS.glob("*.*"))
+        ids_baixados = set()
+        indices_baixados = set()
 
-        url = f"https://www.youtube.com/watch?v={vid_id}"
+        for arq in arquivos_locais:
+            if arq.suffix in ['.part', '.ytdl']:
+                continue
+            match_idx = re.match(r'^(\d{3})_', arq.name)
+            if match_idx:
+                indices_baixados.add(int(match_idx.group(1)))
+            match_id = re.search(r'([a-zA-Z0-9_-]{11})', arq.name)
+            if match_id:
+                ids_baixados.add(match_id.group(1))
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                res = ydl.download([url])
-                if res == 0:
-                    sucessos += 1
-                else:
-                    erros += 1
-        except Exception as e:
-            print(f"   ❌ Erro ao baixar vídeo {vid_id}: {e}")
-            erros += 1
+        pendentes = []
+        for idx, vid in enumerate(videos_cronologicos, start=1):
+            vid_id = vid['id']
+            titulo = vid.get('title', '')
+            titulo_clean = sanitizar_nome(titulo)
+            prefixo = f"{idx:03d}"
+            nome_base = f"{prefixo}_{vid_id}_{titulo_clean}".rstrip('_')
 
-    print("\n==========================================================================")
-    print("🎉 PROCESSAMENTO CONCLUÍDO!")
-    print(f"   • Áudios baixados nesta sessão: {sucessos}")
-    print(f"   • Erros/Falhas:                 {erros}")
-    print(f"   • Total de arquivos na pasta:   {len(list(PASTA_AUDIOS.glob('*.*')))}")
-    print("==========================================================================")
+            if idx in indices_baixados or vid_id in ids_baixados:
+                continue
+            pendentes.append((idx, vid_id, titulo, nome_base))
+
+        if not pendentes:
+            print("\n" + "=" * 74)
+            print(f"🎉 SUCESSO TOTAL! TODOS OS {total_videos} ÁUDIOS FORAM BAIXADOS E ESTÃO PRONTOS!")
+            print("=" * 74 + "\n")
+            break
+
+        print(f"🔄 --- RODADA {rodada}: {len(pendentes)} ÁUDIOS PENDENTES DE {total_videos} ---")
+
+        sucessos = 0
+        erros = 0
+
+        for i, (idx, vid_id, titulo, nome_base) in enumerate(pendentes, start=1):
+            print(f"[{i}/{len(pendentes)}] 📥 [{idx:03d}/{total_videos}] Baixando: {titulo} (ID: {vid_id})...", flush=True)
+            
+            caminho_saida = PASTA_AUDIOS / f"{nome_base}.%(ext)s"
+            ydl_opts = dict(ydl_opts_base)
+            ydl_opts['outtmpl'] = str(caminho_saida)
+            url = f"https://www.youtube.com/watch?v={vid_id}"
+
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    res = ydl.download([url])
+                    if res == 0:
+                        sucessos += 1
+                    else:
+                        erros += 1
+            except Exception as e:
+                print(f"   ❌ Erro/Timeout ao baixar vídeo {vid_id}: {e}", flush=True)
+                erros += 1
+
+            # Remover possíveis arquivos temporários incompletos em caso de erro
+            for temp_file in PASTA_AUDIOS.glob("*.part"):
+                try: temp_file.unlink()
+                except Exception: pass
+
+        rodada += 1
+        import time
+        print(f"⏳ Pausando 5 segundos antes da próxima verificação/rodada...\n", flush=True)
+        time.sleep(5)
 
 if __name__ == "__main__":
     main()
