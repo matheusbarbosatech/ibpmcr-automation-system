@@ -31,15 +31,13 @@ from src.infrastructure.ffmpeg_client import FFmpegClient
 logger = get_logger("ExecutarFase3Renderizacao")
 
 DESKTOP_DATASET_ROOT = Path(r"C:\Users\matheus\Desktop\dataset")
+NETWORK_VIDEOS_DIR = Path(r"\\LENOVO\Users\mathe\Desktop\Videos_IBPM_Agosto_2026")
+
 PASTAS_MIDIA_CANDIDATAS = [
+    NETWORK_VIDEOS_DIR,
     BASE_DIR / "data" / "videos",
-    DESKTOP_DATASET_ROOT / "2026" / "audios",
-    DESKTOP_DATASET_ROOT / "2025" / "audios",
-    DESKTOP_DATASET_ROOT / "2024" / "audios",
-    DESKTOP_DATASET_ROOT / "2023" / "audios",
-    DESKTOP_DATASET_ROOT / "2022" / "audios",
-    DESKTOP_DATASET_ROOT / "audios",
-    BASE_DIR / "dataset" / "audios",
+    DESKTOP_DATASET_ROOT,
+    BASE_DIR / "dataset",
     BASE_DIR / "data" / "audios",
     BASE_DIR / "data" / "fase1_mapeamento" / "audios",
 ]
@@ -48,18 +46,56 @@ PASTAS_MIDIA_CANDIDATAS = [
 def localizar_midia_origem(orig: str) -> Optional[Path]:
     extensoes = [".mp4", ".webm", ".mkv", ".mp3", ".wav"]
     sufixos_ignorar = ("_surgical.mp4", "_enhanced.mp4", "_9x16.mp4", "_corte_")
+    id_yt = orig.split("_")[1] if "_" in orig else orig
+
     for pasta in PASTAS_MIDIA_CANDIDATAS:
         if not pasta.exists():
             continue
+        
+        # 1. Busca direta por nome exato na raiz da pasta
         for ext in extensoes:
             p = pasta / f"{orig}{ext}"
             if p.is_file() and not any(s in p.name for s in sufixos_ignorar):
-                return p
-        id_yt = orig.split("_")[1] if "_" in orig else orig
-        for arq in pasta.glob("*.*"):
-            if arq.is_file() and not any(s in arq.name for s in sufixos_ignorar) and (orig in arq.name or id_yt in arq.name):
-                return arq
-    return None
+                return garantir_midia_local(p)
+
+        # 2. Busca rápida por ID/nome nos arquivos diretos da pasta (iterdir)
+        try:
+            for arq in pasta.iterdir():
+                if arq.is_file() and not any(s in arq.name for s in sufixos_ignorar) and arq.suffix.lower() in extensoes:
+                    if orig in arq.name or (id_yt and id_yt in arq.name):
+                        return garantir_midia_local(arq)
+        except Exception:
+            pass
+
+LOCAL_TEMP_CACHE = BASE_DIR / "data" / "temp_local_cache"
+
+
+def garantir_midia_local(src_path: Optional[Path]) -> Optional[Path]:
+    """
+    Se o arquivo de mídia estiver em um compartilhamento de rede UNC (\\\\LENOVO...),
+    copia o arquivo para a pasta local temporária antes de recortar, garantindo velocidade máxima (100+ fps).
+    """
+    if not src_path or not src_path.exists():
+        return src_path
+
+    if str(src_path).startswith("\\\\") or str(src_path).startswith("//"):
+        LOCAL_TEMP_CACHE.mkdir(parents=True, exist_ok=True)
+        local_target = LOCAL_TEMP_CACHE / src_path.name
+
+        if local_target.exists():
+            try:
+                if local_target.stat().st_size == src_path.stat().st_size and local_target.stat().st_size > 0:
+                    return local_target
+            except Exception:
+                pass
+
+        logger.info(f"🚚 Copiando mídia 4K da rede ({src_path.name}) para cache local de alta velocidade...")
+        import shutil
+        shutil.copy2(src_path, local_target)
+        logger.info(f"⚡ Mídia local pronta para uso: '{local_target.name}'")
+        return local_target
+
+    return src_path
 
 
 def gerar_copys_postagem(cortes_info: List[Dict[str, Any]], output_json: Path, output_txt: Path) -> List[Dict[str, Any]]:
@@ -351,7 +387,12 @@ def executar_fase3_renderizacao(
                         import subprocess
                         ffmpeg_bin = settings.FFMPEG_BINARY_PATH or "ffmpeg"
                         cut_start = 2.0 if "surgical" in src_file.name else start_sec
-                        cmd = [ffmpeg_bin, "-y", "-ss", str(cut_start), "-i", str(src_file), "-t", str(dur), "-c", "copy", str(out_cut_file)]
+                        cmd = [
+                            ffmpeg_bin, "-y", "-ss", str(cut_start), "-i", str(src_file),
+                            "-t", str(dur), "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+                            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+                            "-avoid_negative_ts", "make_zero", str(out_cut_file)
+                        ]
                         subprocess.run(cmd, capture_output=True, check=True)
                         painel.registrar_corte(c_id_clean, orig, dur, com_capa=False, status="OK")
                     except Exception as err:

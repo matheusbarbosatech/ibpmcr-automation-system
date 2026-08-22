@@ -76,13 +76,8 @@ PASTA_TEMP_SCRATCH = PASTA_FASE2 / "temp_scratch"
 
 DESKTOP_DATASET_ROOT = Path(r"C:\Users\matheus\Desktop\dataset")
 PASTAS_AUDIO_FALLBACK = [
-    DESKTOP_DATASET_ROOT / "2026" / "audios",
-    DESKTOP_DATASET_ROOT / "2025" / "audios",
-    DESKTOP_DATASET_ROOT / "2024" / "audios",
-    DESKTOP_DATASET_ROOT / "2023" / "audios",
-    DESKTOP_DATASET_ROOT / "2022" / "audios",
-    DESKTOP_DATASET_ROOT / "audios",
-    BASE_DIR / "dataset" / "audios",
+    DESKTOP_DATASET_ROOT,
+    BASE_DIR / "dataset",
     BASE_DIR / "data" / "acervo_completo",
     BASE_DIR / "data" / "audios",
     BASE_DIR / "data" / "fase1_mapeamento" / "audios",
@@ -740,7 +735,7 @@ class PipelineMineracaoFase2:
 
         for dir_audio in self.dir_audios_candidatos:
             if dir_audio.exists():
-                for arq in dir_audio.iterdir():
+                for arq in dir_audio.rglob("*"):
                     if arq.is_file() and arq.suffix.lower() in self.EXTENSOES_MIDIA:
                         yt_id = self.extrair_yt_id(arq.name)
                         idx = self.extrair_indice(arq.name)
@@ -753,7 +748,7 @@ class PipelineMineracaoFase2:
         formatos_texto = {".txt", ".srt", ".vtt"}
         for dir_trans in self.dir_transcricoes_candidatos:
             if dir_trans.exists():
-                for arq in dir_trans.iterdir():
+                for arq in dir_trans.rglob("*"):
                     if arq.is_file():
                         ext = arq.suffix.lower()
                         yt_id = self.extrair_yt_id(arq.name)
